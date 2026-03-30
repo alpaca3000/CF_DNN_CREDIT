@@ -1,0 +1,3 @@
+Method,Total CFs Found,Plausibility (LOF-NR),Avg Weighted Proximity (Cost),Avg Relative Impact (RIM),Runtime (s)
+CFM-FW (Ours),2.65,0.858335,29.819349999999996,0.188535,46.2822003364563
+DiCE (Baseline),3.0,0.95,37.40708,0.79729,9.452098655700684

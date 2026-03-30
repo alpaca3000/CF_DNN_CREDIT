@@ -1,0 +1,23 @@
+numpy
+pandas
+scikit-learn
+matplotlib
+seaborn
+xgboost
+ucimlrepo
+
+# thư viện làm model interpretability
+torch
+torchvision
+torchaudio
+pytorch-tabnet
+
+# thư viện tối ưu hóa parameter
+optuna
+
+# thư viện làm cf
+pymoo
+dice_ml
+alibi
+shap
+lime

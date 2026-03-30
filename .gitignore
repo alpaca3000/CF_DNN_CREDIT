@@ -1,0 +1,40 @@
+# Python cache/build
+__pycache__/
+*.py[cod]
+*.so
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+build/
+dist/
+*.egg-info/
+
+# Virtual env
+.venv/
+venv/
+env/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# IDE/OS
+.vscode/
+.idea/
+.DS_Store
+
+# Secrets
+.env
+.env.*
+
+# Logs/temp
+*.log
+*.tmp
+
+# Project outputs (thường rất nặng)
+outputs/models/
+outputs/results/
+
+# Data generated/raw lớn (nếu không muốn push)
+data/raw/
+data/processed/
+notesth.txt
