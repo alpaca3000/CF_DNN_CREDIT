@@ -180,3 +180,13 @@ class CreditPreprocessor:
             "actionable": actionable,
             "immutable": immutable,
         }
+
+def extract_num_ranges(df_train_raw, num_features):
+    """
+    Hàm này được sử dụng để Tính mảng num_ranges (Max - Min) trả về NumPy array để dùng cho CF từ dữ liệu thô"""
+    num_ranges = {}
+    for col in num_features:
+        min_val = float(df_train_raw[col].min())
+        max_val = float(df_train_raw[col].max())
+        num_ranges[col] = max_val - min_val
+    return num_ranges
