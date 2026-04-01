@@ -18,7 +18,6 @@ class CreditPreprocessor:
       - `tree`: ordinal encode categorical, no scaling
       - `classic_mlp`: scale numeric + one-hot categorical
       - `embedding`: scale numeric + ordinal categorical
-      - `tabnet`: scale numeric + ordinal categorical
     """
 
     def __init__(self, dataset_name: str = "german", model_type: str = "embedding") -> None:
@@ -33,29 +32,48 @@ class CreditPreprocessor:
         self.num_features_: List[str] = []
         self.cat_features_: List[str] = []
         self.num_medians_: Dict[str, float] = {}
+        self.num_ranges_: Dict[str, float] = {}
 
         self.configs: Dict[str, Dict[str, Any]] = {
             "german": {
-                # Đưa Nhóm 3 và 4 vào đây để NSGA-II tối ưu
+                # Chú ý: Đưa "Age", "Employment" sang Actionable để áp dụng được luật >=
                 "actionable": [
-                    "Amount", "Duration", "Purpose", "InstallmentRate", "OtherDebtors", 
-                    "Status", "Savings", "Property", "OtherPlans", "ExistingCredits", "Telephone"
+                    "Amount", "Duration", "Purpose", "InstallmentRate", 
+                    "OtherDebtors", "OtherPlans", "Telephone", 
+                    "ExistingCredits", "Status", "Savings"
                 ],
-                # Đưa Nhóm 1 và Nhóm 2 vào đây. 
-                # - Nhóm 1 sẽ bị khóa cứng ở create_pymoo_space.
-                # - Nhóm 2 sẽ bị kiểm soát bởi mảng G trong CFMProblem.
+                
+                # Nhóm 1 & 2: Khóa chặt để tránh đưa ra lời khuyên phi thực tế hoặc phi đạo đức
                 "immutable": [
-                    "Age", "PersonalStatus", "ForeignWorker", "Liable", "Housing",
-                    "Employment", "ResidenceSince", "Job", "History"
+                    "PersonalStatus", "ForeignWorker", "History", "Liable", 
+                    "Age", "Employment", "ResidenceSince", "Job", "Housing", "Property"
+                ],
+                
+                # Ép logic 1 chiều cho các biến Actionable
+                "causal_rules": [
+                    {"feature": "Amount", "type": "<="},           # Khuyên giảm số tiền vay
+                    #{"feature": "ExistingCredits", "type": "<="},  # Khuyên trả bớt nợ cũ
+                    #{"feature": "Status", "type": ">="},           # Cải thiện số dư tài khoản
+                    #{"feature": "Savings", "type": ">="}           # Tăng tiền tiết kiệm
+                    {"feature": "Duration", "type": "<="},         # Khuyên giảm thời gian vay
+
                 ],
             },
             "lending_club": {
-                "actionable": ["loan_amnt", "term", "annual_inc"],
-                "immutable": ["emp_length", "addr_state"],
+                "actionable": ["loan_amnt", "term", "annual_inc", "emp_length"],
+                "immutable": ["addr_state"],
+                "causal_rules": [
+                    {"feature": "emp_length", "type": ">="},  # Thâm niên không giảm
+                    {"feature": "annual_inc", "type": ">="}   # Thu nhập khuyến khích không giảm
+                ],
             },
             "gmsc": {
-                "actionable": ["MonthlyIncome", "DebtRatio", "NumberOfOpenCreditLinesAndLoans"],
-                "immutable": ["age"],
+                "actionable": ["age", "MonthlyIncome", "DebtRatio", "NumberOfOpenCreditLinesAndLoans"],
+                "immutable": ["NumberOfTime30-59DaysPastDueNotWorse"],
+                "causal_rules": [
+                    {"feature": "age", "type": ">="},         # Tuổi chỉ có thể tăng
+                    {"feature": "MonthlyIncome", "type": ">="}# Thu nhập khuyến khích không giảm
+                ],
             },
         }
 
@@ -97,6 +115,13 @@ class CreditPreprocessor:
         X = self._validate_input(X_train)
         self.num_features_, self.cat_features_ = self._infer_feature_types(X)
         X = self._clean_features(X, is_fit=True)
+
+        for col in self.num_features_:
+            min_val = float(X[col].min())
+            max_val = float(X[col].max())
+            range_val = max_val - min_val
+            # Đảm bảo không bị chia cho 0 nếu biến là hằng số
+            self.num_ranges_[col] = range_val if range_val > 0 else 1e-9
 
         if self.model_type in {"classic_mlp", "embedding", "tree"} and self.num_features_:
             self.scaler = StandardScaler()
@@ -171,6 +196,7 @@ class CreditPreprocessor:
         cfg = self.configs.get(self.dataset_name, {})
         actionable = [c for c in cfg.get("actionable", []) if c in self.num_features_ + self.cat_features_]
         immutable = [c for c in cfg.get("immutable", []) if c in self.num_features_ + self.cat_features_]
+        causal_rules = cfg.get("causal_rules", [])
 
         return {
             "num_features": self.num_features_,
@@ -179,14 +205,67 @@ class CreditPreprocessor:
             "cat_dims": cat_dims,
             "actionable": actionable,
             "immutable": immutable,
+            "causal_rules": causal_rules,
+            "num_ranges_dict": self.num_ranges_,
         }
 
-def extract_num_ranges(df_train_raw, num_features):
-    """
-    Hàm này được sử dụng để Tính mảng num_ranges (Max - Min) trả về NumPy array để dùng cho CF từ dữ liệu thô"""
-    num_ranges = {}
-    for col in num_features:
-        min_val = float(df_train_raw[col].min())
-        max_val = float(df_train_raw[col].max())
-        num_ranges[col] = max_val - min_val
-    return num_ranges
+    def inverse_transform(self, X_transformed: np.ndarray) -> pd.DataFrame:
+        """
+        Đưa dữ liệu từ không gian model (scaled/encoded) về dạng raw DataFrame.
+
+        Hỗ trợ:
+        - embedding/tree: [num_scaled, cat_ordinal]
+        - classic_mlp: [num_scaled, cat_onehot]
+        """
+        if not self.fitted_:
+            raise RuntimeError("CreditPreprocessor chưa fit. Hãy gọi fit(X_train) trước.")
+
+        X_arr = np.asarray(X_transformed)
+        if X_arr.ndim == 1:
+            X_arr = X_arr.reshape(1, -1)
+
+        n_num = len(self.num_features_)
+        n_cat = len(self.cat_features_)
+
+        # Tách numeric
+        if n_num > 0:
+            num_part = X_arr[:, :n_num].astype(np.float32)
+            if self.scaler is not None:
+                num_raw = self.scaler.inverse_transform(num_part)
+            else:
+                num_raw = num_part
+        else:
+            num_raw = np.empty((X_arr.shape[0], 0), dtype=np.float32)
+
+        # Tách categorical
+        if n_cat > 0:
+            cat_part = X_arr[:, n_num:]
+
+            if self.model_type == "classic_mlp" and self.onehot_encoder is not None:
+                # onehot -> category string
+                cat_raw = self.onehot_encoder.inverse_transform(cat_part)
+            else:
+                # ordinal -> category string
+                if self.ordinal_encoder is None:
+                    raise RuntimeError("ordinal_encoder chưa được khởi tạo để inverse_transform.")
+
+                cat_ord = np.rint(cat_part).astype(np.int64)
+                # clip vào miền hợp lệ cho từng cột
+                for j, cats in enumerate(self.ordinal_encoder.categories_):
+                    max_idx = len(cats) - 1
+                    cat_ord[:, j] = np.clip(cat_ord[:, j], 0, max_idx)
+
+                cat_raw = self.ordinal_encoder.inverse_transform(cat_ord)
+        else:
+            cat_raw = np.empty((X_arr.shape[0], 0), dtype=object)
+
+        out = pd.DataFrame(
+            np.hstack([num_raw, cat_raw]),
+            columns=self.num_features_ + self.cat_features_
+        )
+
+        # Ép lại kiểu số cho cột numeric
+        for col in self.num_features_:
+            out[col] = pd.to_numeric(out[col], errors="coerce")
+
+        return out
