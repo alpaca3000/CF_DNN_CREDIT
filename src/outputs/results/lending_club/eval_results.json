@@ -1,0 +1,27 @@
+{
+  "embed_mlp": {
+    "test_accuracy": 0.67,
+    "test_auc": 0.7079135416666666,
+    "test_f1": 0.5096582466567607,
+    "val_auc": 0.6938093750000001,
+    "best_config": {
+      "hidden_h1": 128,
+      "hidden_h2": 32,
+      "dropout": 0.4795542149013333,
+      "lr": 0.00853618986286683,
+      "weight_decay": 0.0002661901888489054,
+      "input_num_dim": 14,
+      "cat_dims": [
+        2,
+        7,
+        35,
+        5,
+        3,
+        14
+      ],
+      "emb_dims": null,
+      "max_epochs": 100,
+      "patience": 15
+    }
+  }
+}

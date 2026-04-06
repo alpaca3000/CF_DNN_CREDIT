@@ -1,0 +1,20 @@
+{
+  "embed_mlp": {
+    "best_score": 0.8067011788264649,
+    "best_config": {
+      "hidden_h1": 128,
+      "hidden_h2": 64,
+      "dropout": 0.24338629141770907,
+      "lr": 0.0001705053926026929,
+      "weight_decay": 0.00038842777547031416,
+      "input_num_dim": 8,
+      "cat_dims": [
+        11400,
+        13
+      ],
+      "emb_dims": null,
+      "max_epochs": 100,
+      "patience": 15
+    }
+  }
+}
