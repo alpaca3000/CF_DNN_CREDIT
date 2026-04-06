@@ -1,5 +1,4 @@
-
-from typing import Sequence
+# usage: python -m src.cf.cfm_fm.objectives
 import numpy as np
 
 # Loss function dùng để optimize trong quá trình tìm kiếm CF

@@ -1,18 +1,10 @@
+# usage: python -m src.cf.cfm_fm.kdtree_population
+
 import numpy as np
 import pandas as pd
 from sklearn.neighbors import KDTree
 from pymoo.core.sampling import Sampling
 from typing import List, Dict, Any
-import sys
-from pathlib import Path
-
-# Allow running this file directly: `python testwraper.py`
-PROJECT_ROOT = Path(__file__).resolve().parents[3]
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
-
-
-from src.preprocess.preprocess import CreditPreprocessor
 
 class KDTreeInitializer:
     """
@@ -71,61 +63,61 @@ class KDTreeMixedSampling(Sampling):
             
         return X
 
-if __name__ == "__main__":
-    print("--- BẮT ĐẦU TEST BƯỚC 4: KDTREE INITIALIZER ---")
+# if __name__ == "__main__":
+#     print("--- BẮT ĐẦU TEST BƯỚC 4: KDTREE INITIALIZER ---")
     
-    # 1. Tạo tập dữ liệu Dummy (Có thêm cột nhãn 'target')
-    data = {
-        "duration": [6, 48, 12, 42, 24, 36, 18],
-        "credit_amount": [1169, 5951, 2096, 7882, 4870, 3000, 1500],
-        "age": [67, 22, 49, 45, 53, 30, 40],
-        "purpose": ["radio/tv", "education", "furniture", "car", "radio/tv", "car", "education"],
-        "target": [1, 0, 1, 0, 1, 1, 0] # 1 = Duyệt, 0 = Từ chối
-    }
-    X_train = pd.DataFrame(data)
+#     # 1. Tạo tập dữ liệu Dummy (Có thêm cột nhãn 'target')
+#     data = {
+#         "duration": [6, 48, 12, 42, 24, 36, 18],
+#         "credit_amount": [1169, 5951, 2096, 7882, 4870, 3000, 1500],
+#         "age": [67, 22, 49, 45, 53, 30, 40],
+#         "purpose": ["radio/tv", "education", "furniture", "car", "radio/tv", "car", "education"],
+#         "target": [1, 0, 1, 0, 1, 1, 0] # 1 = Duyệt, 0 = Từ chối
+#     }
+#     X_train = pd.DataFrame(data)
     
-    # 2. Khởi tạo và Fit Preprocessor (Chỉ dùng các cột features, không dùng cột target)
-    X_features = X_train.drop(columns=["target"])
-    preprocessor = CreditPreprocessor(dataset_name="german", model_type="embedding")
-    preprocessor.fit(X_features)
+#     # 2. Khởi tạo và Fit Preprocessor (Chỉ dùng các cột features, không dùng cột target)
+#     X_features = X_train.drop(columns=["target"])
+#     preprocessor = CreditPreprocessor(dataset_name="german", model_type="embedding")
+#     preprocessor.fit(X_features)
     
-    # 3. Test KDTreeInitializer
-    print("\nKhởi tạo KDTree với dữ liệu đã được duyệt vay (Nhãn = 1)...")
-    kdtree_engine = KDTreeInitializer(
-        df_train=X_train, 
-        preprocessor=preprocessor, 
-        target_col="target", 
-        good_label=1
-    )
+#     # 3. Test KDTreeInitializer
+#     print("\nKhởi tạo KDTree với dữ liệu đã được duyệt vay (Nhãn = 1)...")
+#     kdtree_engine = KDTreeInitializer(
+#         df_train=X_train, 
+#         preprocessor=preprocessor, 
+#         target_col="target", 
+#         good_label=1
+#     )
     
-    # Khách hàng bị từ chối (Lấy dòng index 1, target = 0)
-    x_rejected = X_features.iloc[[1]].copy()
-    print("\n[Hồ sơ bị từ chối (Gốc)]:")
-    print(x_rejected.to_dict(orient='records')[0])
+#     # Khách hàng bị từ chối (Lấy dòng index 1, target = 0)
+#     x_rejected = X_features.iloc[[1]].copy()
+#     print("\n[Hồ sơ bị từ chối (Gốc)]:")
+#     print(x_rejected.to_dict(orient='records')[0])
     
-    # Lấy 2 láng giềng tốt nhất
-    print("\nTìm kiếm 2 láng giềng gần nhất đã được duyệt vay...")
-    kdtree_pop = kdtree_engine.get_initial_population(x_rejected, k=2)
+#     # Lấy 2 láng giềng tốt nhất
+#     print("\nTìm kiếm 2 láng giềng gần nhất đã được duyệt vay...")
+#     kdtree_pop = kdtree_engine.get_initial_population(x_rejected, k=2)
     
-    for i, record in enumerate(kdtree_pop):
-        print(f"Láng giềng {i+1}: {record}")
+#     for i, record in enumerate(kdtree_pop):
+#         print(f"Láng giềng {i+1}: {record}")
         
-    # 4. Test KDTreeMixedSampling (Giả lập pymoo gọi hàm)
-    print("\nKiểm tra lớp bọc KDTreeMixedSampling cho pymoo...")
-    sampling = KDTreeMixedSampling(kdtree_pop)
+#     # 4. Test KDTreeMixedSampling (Giả lập pymoo gọi hàm)
+#     print("\nKiểm tra lớp bọc KDTreeMixedSampling cho pymoo...")
+#     sampling = KDTreeMixedSampling(kdtree_pop)
     
-    # Giả sử pymoo muốn khởi tạo quần thể gồm 5 cá thể (pop_size = 5)
-    # Vì KDTree chỉ tìm được 2 láng giềng, Sampling phải lặp lại dữ liệu để điền đủ 5
-    mock_population = sampling._do(problem=None, n_samples=5)
+#     # Giả sử pymoo muốn khởi tạo quần thể gồm 5 cá thể (pop_size = 5)
+#     # Vì KDTree chỉ tìm được 2 láng giềng, Sampling phải lặp lại dữ liệu để điền đủ 5
+#     mock_population = sampling._do(problem=None, n_samples=5)
     
-    print(f"Kích thước quần thể sinh ra: {mock_population.shape}")
-    print(f"Kiểu dữ liệu của mảng: {mock_population.dtype} (Phải là 'object')")
-    print("Phần tử đầu tiên trong quần thể:", mock_population[0])
-    print("Phần tử thứ 3 (phải lặp lại từ đầu):", mock_population[2])
+#     print(f"Kích thước quần thể sinh ra: {mock_population.shape}")
+#     print(f"Kiểu dữ liệu của mảng: {mock_population.dtype} (Phải là 'object')")
+#     print("Phần tử đầu tiên trong quần thể:", mock_population[0])
+#     print("Phần tử thứ 3 (phải lặp lại từ đầu):", mock_population[2])
     
-    # Assertions
-    assert isinstance(kdtree_pop, list), "Lỗi: Đầu ra KDTree không phải là list."
-    assert mock_population.dtype == object, "Lỗi: Mảng Sampling không phải là dtype=object."
-    assert mock_population.shape[0] == 5, "Lỗi: Sampling không sinh đủ số lượng cá thể yêu cầu."
+#     # Assertions
+#     assert isinstance(kdtree_pop, list), "Lỗi: Đầu ra KDTree không phải là list."
+#     assert mock_population.dtype == object, "Lỗi: Mảng Sampling không phải là dtype=object."
+#     assert mock_population.shape[0] == 5, "Lỗi: Sampling không sinh đủ số lượng cá thể yêu cầu."
     
-    print("\n=> CHÚC MỪNG! Module KDTree và Sampling đã hoạt động hoàn hảo.")
+#     print("\n=> CHÚC MỪNG! Module KDTree và Sampling đã hoạt động hoàn hảo.")

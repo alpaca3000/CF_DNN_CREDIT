@@ -6,7 +6,7 @@ on GermanCredit, GMSC, LendingClub datasets.
 Ghi lại kết quả so sánh để tìm best model.
 
 Usage:
-    python -m src.models.train --dataset germancredit --n-trials 20
+    python -m src.models.train --dataset german_credit --n- trials 20
     python -m src.models.train --dataset gmsc --n-trials 20 --verbose
 """
 
@@ -24,7 +24,6 @@ import torch
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, roc_auc_score, f1_score
 from torch.utils.data import DataLoader, TensorDataset
-from ucimlrepo import fetch_ucirepo
 
 from src.models.classic_mlp import ClassicMLP
 from src.models.embed_mlp import EmbedMLP
@@ -51,57 +50,59 @@ MODELS_DIR.mkdir(exist_ok=True)
 RESULTS_DIR.mkdir(exist_ok=True)
 
 
-def _resolve_dataset_name(dataset: str) -> str:
-    if dataset == "germancredit":
-        return "german"
-    if dataset == "lendingclub":
-        return "lending_club"
-    return dataset
-
-
 # ====================
 # Data Loading
 # ====================
 
 def load_german_credit() -> tuple[pd.DataFrame, np.ndarray]:
-    """Load GermanCredit dataset from UCI ML Repository (id=144)."""
-    print("Fetching GermanCredit dataset from UCI ML Repository...")
-    german_credit = fetch_ucirepo(id=144)
+    """Load GermanCredit dataset from data/german_credit.csv."""
+    print("Fetching GermanCredit dataset from data/german_credit.csv...")
+    df = pd.read_csv(DATA_DIR / "german_credit.csv")
     
-    X = german_credit.data.features.copy()
-    y = german_credit.data.targets.copy()
+    # GermanCredit target is 'Class'
+    target_col = "Class"
+    if target_col not in df.columns:
+        raise ValueError(f"Target column '{target_col}' not found. Available columns: {df.columns.tolist()}")
     
-    # Flatten y if needed
-    if isinstance(y, pd.DataFrame):
-        y = y.iloc[:, 0].values
-    else:
-        y = np.asarray(y).reshape(-1)
-    
-    # Convert to binary (0/1)
-    y = (y != 1).astype(int)
+    y = df[target_col].to_numpy().astype(int)
+    X = df.drop(columns=[target_col]).copy()
     
     print(f"Loaded GermanCredit: X={X.shape}, y={y.shape}")
     print(f"  Class distribution: {np.bincount(y.astype(int))}")
     
     return X, y
 
+# def load_german_credit() -> tuple[pd.DataFrame, np.ndarray]:
+#     german = fetch_ucirepo(id=144)
+#     X = german.data.features.copy()
+#     y_raw = german.data.targets.copy()
+
+#     if isinstance(y_raw, pd.DataFrame):
+#         y_raw = y_raw.iloc[:, 0].to_numpy()
+#     else:
+#         y_raw = np.asarray(y_raw).reshape(-1)
+
+#     print("Unique raw target values:", np.unique(y_raw, return_counts=True))
+
+#     # UCI German Credit: 1=good, 2=bad
+#     y = (y_raw == 1).astype(int)  # bad=1, good=0
+
+#     print(f"Loaded GermanCredit from UCI: X={X.shape}, y={y.shape}")
+#     print(f"  Class distribution: {np.bincount(y)}")
+#     return X, y
+
 
 def load_gmsc() -> tuple[pd.DataFrame, np.ndarray]:
     """Load GMSC dataset from local CSV files."""
-    train_file = DATA_DIR / "GiveMeSomeCredit-training.csv"
-    
-    if not train_file.exists():
-        raise FileNotFoundError(f"GMSC dataset not found at {train_file}")
-    
-    df = pd.read_csv(train_file)
+    gmsc = pd.read_csv(DATA_DIR / "gmsc.csv")
     
     # GMSC target is 'SeriousDlqin2yrs'
     target_col = "SeriousDlqin2yrs"
-    if target_col not in df.columns:
-        raise ValueError(f"Target column '{target_col}' not found. Available columns: {df.columns.tolist()}")
+    if target_col not in gmsc.columns:
+        raise ValueError(f"Target column '{target_col}' not found. Available columns: {gmsc.columns.tolist()}")
     
-    y = df[target_col].to_numpy().astype(int)
-    X = df.drop(columns=[target_col]).copy()
+    y = gmsc[target_col].to_numpy().astype(int)
+    X = gmsc.drop(columns=[target_col]).copy()
     
     print(f"Loaded GMSC: X={X.shape}, y={y.shape}")
     print(f"  Class distribution: {np.bincount(y.astype(int))}")
@@ -110,34 +111,29 @@ def load_gmsc() -> tuple[pd.DataFrame, np.ndarray]:
 
 
 def load_lending_club() -> tuple[pd.DataFrame, np.ndarray]:
-    """Load LendingClub dataset from UCI ML Repository (id=228)."""
-    print("Fetching LendingClub dataset from UCI ML Repository...")
-    lending_club = fetch_ucirepo(id=228)
+    """Load LendingClub dataset from local CSV files."""
+    print("Fetching LendingClub dataset from  data/lending_club_balanced_sample_10k.csv...")
+    lending_club = pd.read_csv(DATA_DIR / "lending_club_balanced_sample_10k.csv")
+
+    target_col = "target"
+    if target_col not in lending_club.columns:
+        raise ValueError(f"Target column '{target_col}' not found. Available columns: {lending_club.columns.tolist()}")
     
-    X = lending_club.data.features.copy()
-    y = lending_club.data.targets.copy()
-    
-    # Flatten y if needed
-    if isinstance(y, pd.DataFrame):
-        y = y.iloc[:, 0].values
-    else:
-        y = np.asarray(y).reshape(-1)
-    
-    # Convert to binary (0/1)
-    y = (y != 0).astype(int)
-    
+    y = lending_club[target_col].to_numpy().astype(int)
+    X = lending_club.drop(columns=[target_col]).copy()
+
     print(f"Loaded LendingClub: X={X.shape}, y={y.shape}")
     print(f"  Class distribution: {np.bincount(y.astype(int))}")
-    
+
     return X, y
 
 
 def load_data(dataset: str) -> tuple[pd.DataFrame, np.ndarray]:
     """Load dataset by name."""
     loaders = {
-        "germancredit": load_german_credit,
+        "german_credit": load_german_credit,
         "gmsc": load_gmsc,
-        "lendingclub": load_lending_club,
+        "lending_club": load_lending_club,
     }
     
     if dataset not in loaders:
@@ -154,6 +150,7 @@ def preprocess_data(
     df: pd.DataFrame,
     y: np.ndarray,
     dataset_name: str,
+    model: str = "all",
     test_size: float = 0.2,
     val_size: float = 0.2,
     seed: int = 42,
@@ -186,67 +183,68 @@ def preprocess_data(
         stratify=y_trainval,
     )
 
-    dataset_name = _resolve_dataset_name(dataset_name)
+    all_models = {"classic_mlp", "embed_mlp", "xgboost", "random_forest"}
+    if model not in all_models and model != "all":
+        raise ValueError(f"Unknown model: {model}. Choose from ['all', {sorted(all_models)}]")
 
-    # model-specific preprocessors
-    pp_classic = CreditPreprocessor(dataset_name=dataset_name, model_type="classic_mlp")
-    pp_embedding = CreditPreprocessor(dataset_name=dataset_name, model_type="embedding")
-    pp_tree = CreditPreprocessor(dataset_name=dataset_name, model_type="tree")
+    need_classic = model in {"all", "classic_mlp"}
+    need_embedding = model in {"all", "embed_mlp"}
+    need_tree = model in {"all", "xgboost", "random_forest"}
 
-    pp_classic.fit(X_train_df)
-    pp_embedding.fit(X_train_df)
-    pp_tree.fit(X_train_df)
+    preprocessors: Dict[str, CreditPreprocessor] = {}
+    metadata: Dict[str, Any] = {}
+    splits: Dict[str, Any] = {
+        "y_train": np.asarray(y_train).astype(int),
+        "y_val": np.asarray(y_val).astype(int),
+        "y_test": np.asarray(y_test).astype(int),
+    }
 
-    X_train_classic = pp_classic.transform(X_train_df)
-    X_val_classic = pp_classic.transform(X_val_df)
-    X_test_classic = pp_classic.transform(X_test_df)
+    if need_classic:
+        pp_classic = CreditPreprocessor(dataset_name=dataset_name, model_type="classic_mlp")
+        pp_classic.fit(X_train_df)
+        preprocessors["classic"] = pp_classic
+        splits["classic"] = {
+            "X_train": pp_classic.transform(X_train_df),
+            "X_val": pp_classic.transform(X_val_df),
+            "X_test": pp_classic.transform(X_test_df),
+        }
 
-    X_train_embedding = pp_embedding.transform(X_train_df)
-    X_val_embedding = pp_embedding.transform(X_val_df)
-    X_test_embedding = pp_embedding.transform(X_test_df)
+    if need_embedding:
+        pp_embedding = CreditPreprocessor(dataset_name=dataset_name, model_type="embedding")
+        pp_embedding.fit(X_train_df)
+        preprocessors["embedding"] = pp_embedding
+        splits["embedding"] = {
+            "X_train": pp_embedding.transform(X_train_df),
+            "X_val": pp_embedding.transform(X_val_df),
+            "X_test": pp_embedding.transform(X_test_df),
+        }
+        metadata["embedding"] = pp_embedding.get_metadata()
 
-    X_train_tree = pp_tree.transform(X_train_df)
-    X_val_tree = pp_tree.transform(X_val_df)
-    X_test_tree = pp_tree.transform(X_test_df)
+    if need_tree:
+        pp_tree = CreditPreprocessor(dataset_name=dataset_name, model_type="tree")
+        pp_tree.fit(X_train_df)
+        preprocessors["tree"] = pp_tree
+        splits["tree"] = {
+            "X_train": pp_tree.transform(X_train_df),
+            "X_val": pp_tree.transform(X_val_df),
+            "X_test": pp_tree.transform(X_test_df),
+        }
 
-    emb_meta = pp_embedding.get_metadata()
-
-    print(
-        f"Train/Val/Test raw: {X_train_df.shape} / {X_val_df.shape} / {X_test_df.shape}"
-    )
-    print(
-        f"Features classic/embedding/tree: {X_train_classic.shape[1]} / {X_train_embedding.shape[1]} / {X_train_tree.shape[1]}"
-    )
+    print(f"Train/Val/Test raw: {X_train_df.shape} / {X_val_df.shape} / {X_test_df.shape}")
+    dim_msgs = []
+    if "classic" in splits:
+        dim_msgs.append(f"classic={splits['classic']['X_train'].shape[1]}")
+    if "embedding" in splits:
+        dim_msgs.append(f"embedding={splits['embedding']['X_train'].shape[1]}")
+    if "tree" in splits:
+        dim_msgs.append(f"tree={splits['tree']['X_train'].shape[1]}")
+    if dim_msgs:
+        print("Features: " + " | ".join(dim_msgs))
 
     return {
-        "preprocessors": {
-            "classic": pp_classic,
-            "embedding": pp_embedding,
-            "tree": pp_tree,
-        },
-        "metadata": {
-            "embedding": emb_meta,
-        },
-        "splits": {
-            "y_train": np.asarray(y_train).astype(int),
-            "y_val": np.asarray(y_val).astype(int),
-            "y_test": np.asarray(y_test).astype(int),
-            "classic": {
-                "X_train": X_train_classic,
-                "X_val": X_val_classic,
-                "X_test": X_test_classic,
-            },
-            "embedding": {
-                "X_train": X_train_embedding,
-                "X_val": X_val_embedding,
-                "X_test": X_test_embedding,
-            },
-            "tree": {
-                "X_train": X_train_tree,
-                "X_val": X_val_tree,
-                "X_test": X_test_tree,
-            },
-        },
+        "preprocessors": preprocessors,
+        "metadata": metadata,
+        "splits": splits,
     }
 
 
@@ -478,31 +476,20 @@ def tune_all_models(
     y_val = data["splits"]["y_val"]
     y_test = data["splits"]["y_test"]
 
-    classic = data["splits"]["classic"]
-    classic_loaders = create_dataloaders(
-        classic["X_train"],
-        y_train,
-        classic["X_val"],
-        y_val,
-        classic["X_test"],
-        y_test,
-    )
-    input_dim_classic = classic["X_train"].shape[1]
-
-    embedding = data["splits"]["embedding"]
-    emb_meta = data["metadata"]["embedding"]
-    embedding_loaders = create_embedding_dataloaders(
-        embedding["X_train"],
-        y_train,
-        embedding["X_val"],
-        y_val,
-        embedding["X_test"],
-        y_test,
-        cat_idxs=emb_meta["cat_idxs"],
-    )
-    input_num_dim = embedding["X_train"].shape[1] - len(emb_meta["cat_idxs"])
-    
     if "classic_mlp" in models:
+        if "classic" not in data["splits"]:
+            raise ValueError("Missing classic preprocessing splits for classic_mlp.")
+        classic = data["splits"]["classic"]
+        classic_loaders = create_dataloaders(
+            classic["X_train"],
+            y_train,
+            classic["X_val"],
+            y_val,
+            classic["X_test"],
+            y_test,
+        )
+        input_dim_classic = classic["X_train"].shape[1]
+
         print("\n[ClassicMLP] Tuning...")
         space = get_classic_mlp_search_space(input_dim_classic)
         result = tune_torch_binary_model(
@@ -518,6 +505,21 @@ def tune_all_models(
         print(f"  Best AUC: {result['best_score']:.6f}")
     
     if "embed_mlp" in models:
+        if "embedding" not in data["splits"] or "embedding" not in data["metadata"]:
+            raise ValueError("Missing embedding preprocessing splits/metadata for embed_mlp.")
+        embedding = data["splits"]["embedding"]
+        emb_meta = data["metadata"]["embedding"]
+        embedding_loaders = create_embedding_dataloaders(
+            embedding["X_train"],
+            y_train,
+            embedding["X_val"],
+            y_val,
+            embedding["X_test"],
+            y_test,
+            cat_idxs=emb_meta["cat_idxs"],
+        )
+        input_num_dim = embedding["X_train"].shape[1] - len(emb_meta["cat_idxs"])
+
         print("\n[EmbedMLP] Tuning...")
         space = get_embed_mlp_search_space(input_num_dim=input_num_dim, cat_dims=emb_meta["cat_dims"])
         result = tune_torch_binary_model(
@@ -532,8 +534,10 @@ def tune_all_models(
         results["embed_mlp"] = result
         print(f"  Best AUC: {result['best_score']:.6f}")
     
-    tree = data["splits"]["tree"]
     if "xgboost" in models:
+        if "tree" not in data["splits"]:
+            raise ValueError("Missing tree preprocessing splits for xgboost.")
+        tree = data["splits"]["tree"]
         print("\n[XGBoost] Tuning...")
         space = get_xgboost_search_space()
         result = tune_sklearn_like_binary_model(
@@ -551,6 +555,9 @@ def tune_all_models(
         print(f"  Best AUC: {result['best_score']:.6f}")
     
     if "random_forest" in models:
+        if "tree" not in data["splits"]:
+            raise ValueError("Missing tree preprocessing splits for random_forest.")
+        tree = data["splits"]["tree"]
         print("\n[RandomForest] Tuning...")
         space = get_random_forest_search_space()
         result = tune_sklearn_like_binary_model(
@@ -588,21 +595,8 @@ def evaluate_models(
     y_test = data["splits"]["y_test"]
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    classic = data["splits"]["classic"]
-    classic_loaders = create_dataloaders(
-        classic["X_train"], y_train, classic["X_val"], y_val, classic["X_test"], y_test
-    )
-    embedding = data["splits"]["embedding"]
-    emb_meta = data["metadata"]["embedding"]
-    embedding_loaders = create_embedding_dataloaders(
-        embedding["X_train"],
-        y_train,
-        embedding["X_val"],
-        y_val,
-        embedding["X_test"],
-        y_test,
-        cat_idxs=emb_meta["cat_idxs"],
-    )
+    classic_loaders = None
+    embedding_loaders = None
     
     eval_results = {}
     
@@ -613,6 +607,31 @@ def evaluate_models(
         
         try:
             if model_name in ["classic_mlp", "embed_mlp"]:
+                if model_name == "classic_mlp":
+                    if classic_loaders is None:
+                        classic = data["splits"]["classic"]
+                        classic_loaders = create_dataloaders(
+                            classic["X_train"],
+                            y_train,
+                            classic["X_val"],
+                            y_val,
+                            classic["X_test"],
+                            y_test,
+                        )
+                else:
+                    if embedding_loaders is None:
+                        embedding = data["splits"]["embedding"]
+                        emb_meta = data["metadata"]["embedding"]
+                        embedding_loaders = create_embedding_dataloaders(
+                            embedding["X_train"],
+                            y_train,
+                            embedding["X_val"],
+                            y_val,
+                            embedding["X_test"],
+                            y_test,
+                            cat_idxs=emb_meta["cat_idxs"],
+                        )
+
                 test_loader = (
                     classic_loaders["test_loader"]
                     if model_name == "classic_mlp"
@@ -740,7 +759,7 @@ def save_results(
 # ====================
 
 def main(
-    dataset: str = "germancredit",
+    dataset: str = "german_credit",
     model: str = "all",
     n_trials: int = 10,
     verbose: bool = False,
@@ -754,7 +773,7 @@ def main(
     df, y = load_data(dataset)
     
     # Preprocess
-    data = preprocess_data(df, y, dataset_name=dataset)
+    data = preprocess_data(df, y, dataset_name=dataset, model=model)
     
     all_models = ["classic_mlp", "embed_mlp", "xgboost", "random_forest"]
     selected_models = all_models if model == "all" else [model]
@@ -778,9 +797,9 @@ if __name__ == "__main__":
     parser.add_argument(
         "--dataset",
         type=str,
-        default="germancredit",
-        choices=["germancredit", "gmsc", "lendingclub"],
-        help="Dataset to use (currently only germancredit is supported)",
+        default="german_credit",
+        choices=["german_credit", "gmsc", "lending_club"],
+        help="Dataset to use (currently only german_credit is supported)",
     )
     parser.add_argument(
         "--model",

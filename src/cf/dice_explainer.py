@@ -1,3 +1,5 @@
+# usage: python -m src.cf.dice_explainer
+
 import pandas as pd
 import numpy as np
 from dice_ml import Data, Model, Dice
@@ -6,10 +8,6 @@ import sys
 from pathlib import Path
 from typing import Any
 import json
-# Allow running this file directly: `python testwraper.py`
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.models.embed_mlp import EmbedMLP
 from src.models.model_wrapper import EmbedMLPWrapper
@@ -17,6 +15,10 @@ from src.preprocess.preprocess import CreditPreprocessor
 from src.cf.metric_evaluator import CFMEvaluator
 from src.cf.cfm_fm.lof import PlausibilityLOF # Import class LOF của bạn
 from src.preprocess.utils import load_data, split_data
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 OUTPUTS_DIR = PROJECT_ROOT / "src" / "outputs"
 MODELS_DIR = OUTPUTS_DIR / "models"
@@ -215,11 +217,11 @@ if __name__ == "__main__":
     print("=" * 70)
 
     print("\n[STEP 1] Loading German Credit data...")
-    df = load_data('german')
+    df = load_data('german_credit')
     print(f"✅ Loaded {len(df)} records, {len(df.columns)} features")
 
     print("\n[STEP 2] Splitting data (80/20 train/test)...")
-    split_result = split_data(df, 'german', 'Class', random_state=42)
+    split_result = split_data(df, 'german_credit', 'Class', random_state=42)
     df_train, df_test = split_result[0], split_result[1]
 
     X_train = df_train.drop('Class', axis=1)
@@ -228,16 +230,16 @@ if __name__ == "__main__":
     y_test = df_test['Class']
 
     print("\n[STEP 3] Preprocessing with CreditPreprocessor...")
-    preprocessor = CreditPreprocessor(dataset_name='german', model_type='embedding')
+    preprocessor = CreditPreprocessor(dataset_name='german_credit', model_type='embedding')
     preprocessor.fit(X_train=X_train)
     metadata = preprocessor.get_metadata()
     print(f"✅ Num features: {len(metadata['num_features'])}")
     print(f"✅ Cat features: {len(metadata['cat_features'])}")
 
     print("\n[STEP 4] Load trained EmbedMLP model...")
-    # load file models .pklfrom MODELS_DIR/germancredit/embed_mlp_best.pkl hoặc lấy best config trong results/germancredit/best_configs.json
+    # load file models .pklfrom MODELS_DIR/german_credit/embed_mlp_best.pkl hoặc lấy best config trong results/german_credit/best_configs.json
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model, best_cfg = _load_embed_model('germancredit', device)
+    model, best_cfg = _load_embed_model('german_credit', device)
     wrapper = EmbedMLPWrapper(model=model, preprocessor=preprocessor, device=device)
 
     run_dice_benchmark(df_train, df_test, wrapper, preprocessor, target_col='Class', num_cf=3)

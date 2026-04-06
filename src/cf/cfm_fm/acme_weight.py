@@ -1,9 +1,4 @@
-# pyright: reportMissingTypeArgument=false, reportUnknownArgumentType=false, reportUnknownMemberType=false, reportUnknownVariableType=false, reportUnknownParameterType=false
-
-from __future__ import annotations
-
 from typing import Any, Callable, List, Sequence
-
 import numpy as np
 import pandas as pd
 

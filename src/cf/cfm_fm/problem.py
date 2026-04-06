@@ -1,16 +1,11 @@
-from typing import Dict, Any, Sequence
+# usage: python -m src.cf.cfm_fm.problem
+
+from typing import Dict, Any
 import pandas as pd
 from pymoo.core.problem import ElementwiseProblem
 from pymoo.core.variable import Real, Choice
 import numpy as np
-import sys
-from pathlib import Path
-# Allow running this file directly: `python testwraper.py`
-PROJECT_ROOT = Path(__file__).resolve().parents[3]
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
 from src.cf.cfm_fm.objectives import validity, proximity, rim, plausibility
-
 
 def create_pymoo_space(df_train: pd.DataFrame, metadata: dict, x_original: pd.Series) -> dict:
     space = {}

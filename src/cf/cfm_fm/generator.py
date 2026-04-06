@@ -1,23 +1,16 @@
-from pathlib import Path
-import sys
-from typing import Any
+# usage: python -m src.cf.cfm_fm.generator
 
+from typing import Any
 import pandas as pd
 import numpy as np
-
-# Allow running this file directly
-PROJECT_ROOT = Path(__file__).resolve().parents[3]
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
-
 from src.models.model_wrapper import EmbedMLPWrapper
 from src.cf.cfm_fm.acme_weight import AcMEEngine
 from src.cf.cfm_fm.kdtree_population import KDTreeInitializer, KDTreeMixedSampling
 from src.cf.cfm_fm.lof import PlausibilityLOF
 from src.cf.cfm_fm.problem import CFMProblem
 from pymoo.algorithms.moo.nsga2 import NSGA2
-from pymoo.operators.crossover.sbx import SBX
-from pymoo.operators.mutation.pm import PM
+# from pymoo.operators.crossover.sbx import SBX
+# from pymoo.operators.mutation.pm import PM
 from pymoo.core.mixed import MixedVariableMating, MixedVariableDuplicateElimination
 from pymoo.optimize import minimize
 
@@ -202,16 +195,16 @@ if __name__ == "__main__":
     
     # ============ STEP 1: Load & Preprocess ============
     print("\n[STEP 1] Loading German Credit data...")
-    df = load_data('german')
+    df = load_data('german_credit')
     print(f"✅ Loaded {len(df)} records, {len(df.columns)} features")
     
     print("\n[STEP 2] Splitting data (80/20 train/test)...")
-    split_result = split_data(df, 'german', 'Class', random_state=42)
+    split_result = split_data(df, 'german_credit', 'Class', random_state=42)
     df_train, df_test = split_result[0], split_result[1]
     print(f"✅ Train: {len(df_train)}, Test: {len(df_test)}")
     
     print("\n[STEP 3] Preprocessing with CreditPreprocessor...")
-    preprocessor = CreditPreprocessor(dataset_name='german', model_type='embedding')
+    preprocessor = CreditPreprocessor(dataset_name='german_credit', model_type='embedding')
     preprocessor.fit(df_train.drop('Class', axis=1))
     metadata = preprocessor.get_metadata()
     print(f"✅ Num features: {len(metadata['num_features'])}")
@@ -250,32 +243,28 @@ if __name__ == "__main__":
     )
     print("✅ CFMFWGenerator initialized")
     
-    # ============ STEP 7: Select 3 Test Samples ============
-    print("\n[STEP 7] Selecting 3 test samples (class 0 predicted)...")
+    # ============ STEP 7: Select 1 Test Samples ============
+    print("\n[STEP 7] Selecting 1 test sample (class 0 predicted)...")
     X_test_raw = df_test.drop('Class', axis=1).copy()
     y_test = df_test['Class'].values
     test_probs = model_wrapper.predict_proba(X_test_raw)
     prob_class1_all = test_probs[:, 1] if test_probs.ndim == 2 else test_probs
     idx_candidates = np.where(prob_class1_all < 0.51)[0]
     
-    if len(idx_candidates) < 3:
-        print(f"⚠️  Only {len(idx_candidates)} samples with pred class 0, using first 3 available")
-        test_indices = list(idx_candidates) + list(range(max(len(idx_candidates), 3)))[:3-len(idx_candidates)]
-    else:
-        test_indices = list(idx_candidates[:3])
+    test_indices = np.random.choice(idx_candidates, size=1, replace=False) if len(idx_candidates) >= 1 else idx_candidates
     
     print(f"✅ Selected indices: {test_indices}")
     
     # ============ STEP 8: Generate CFs ============
     print("\n" + "=" * 70)
-    print("GENERATING COUNTERFACTUALS FOR 3 TEST SAMPLES")
+    print("GENERATING COUNTERFACTUALS FOR 1 TEST SAMPLES")
     print("=" * 70)
     
     all_cf_results = []
     
     for sample_idx, idx in enumerate(test_indices, 1):
         print(f"\n{'─' * 70}")
-        print(f"[SAMPLE {sample_idx}/3] Index: {idx}")
+        print(f"[SAMPLE {sample_idx}/1] Index: {idx}")
         print(f"{'─' * 70}")
         
         x_rejected = X_test_raw.iloc[idx]
@@ -310,7 +299,8 @@ if __name__ == "__main__":
                 x_rejected=x_rejected,
                 pop_size=40,
                 n_gen=30,
-                k_neighbors=50
+                k_neighbors=50,
+                num_cf=3
             )
             
             n_generated = len(df_cf)
@@ -338,12 +328,46 @@ if __name__ == "__main__":
                 
                 # Top 3 best CFs (highest prob)
                 if n_flipped > 0:
+                    feature_cols = metadata["num_features"] + metadata["cat_features"]
+
+                    # Tính LOF cho toàn bộ CF (LOF chuẩn = -score_samples)
+                    X_cf_scaled = generator.preprocessor.transform(df_cf[feature_cols])
+                    cf_scores = generator.plausibility_module.score_samples(X_cf_scaled)
+                    cf_lof_values = -cf_scores
+
                     top_indices = np.argsort(probs_cf)[-3:][::-1]
                     print(f"\nTop 3 CFs (by prob_class1):")
+
                     for rank, cf_idx in enumerate(top_indices, 1):
-                        prob_val = probs_cf[cf_idx]
-                        status = "✅" if prob_val >= 0.51 else "❌"
-                        print(f"  [{rank}] prob={prob_val:.4f} {status}")
+                        prob_val = float(probs_cf[cf_idx])
+                        pred_label = 1 if prob_val >= 0.51 else 0
+                        lof_val = float(cf_lof_values[cf_idx])
+                        status = "✅" if pred_label == 1 else "❌"
+
+                        print(f"  [{rank}] prob={prob_val:.4f} | pred_label={pred_label} {status} | LOF={lof_val:.4f}")
+
+                        cf_row = df_cf.iloc[cf_idx]
+                        changes = {}
+
+                        for col in feature_cols:
+                            orig_val = x_rejected[col]   # x_rejected là Series
+                            cf_val = cf_row[col]
+
+                            if isinstance(orig_val, (int, float, np.integer, np.floating)) and \
+                               isinstance(cf_val, (int, float, np.integer, np.floating)):
+                                if not np.isclose(orig_val, cf_val, atol=1e-5):
+                                    changes[col] = (orig_val, cf_val)
+                            else:
+                                if orig_val != cf_val:
+                                    changes[col] = (orig_val, cf_val)
+
+                        if changes:
+                            print("       Changed columns:")
+                            for k, (v0, v1) in changes.items():
+                                print(f"         - {k}: {v0} -> {v1}")
+                        else:
+                            print("       Changed columns: (none)")
+
                 
                 status = 'SUCCESS' if n_flipped > 0 else 'FAIL'
                 all_cf_results.append({
