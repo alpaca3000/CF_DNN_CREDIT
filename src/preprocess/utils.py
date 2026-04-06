@@ -12,13 +12,13 @@ DATA_DIR = PROJECT_ROOT / "data"
 def load_data(dataset_name: str) -> pd.DataFrame:
 	"""Load dữ liệu từ data/ theo dataset_name đã chuẩn xác."""
 	file_map = {
-		"german": "german_credit.csv",
+		"german_credit": "german_credit.csv",
 		"gmsc": "gmsc.csv",
 		"lending_club": "lending_club_50k.csv",
 	}
 
 	if dataset_name not in file_map:
-		raise ValueError("dataset_name phải là: 'german', 'gmsc', hoặc 'lending_club'.")
+		raise ValueError("dataset_name phải là: 'german_credit', 'gmsc', hoặc 'lending_club'.")
 
 	path = DATA_DIR / file_map[dataset_name]
 	if not path.exists():
@@ -38,7 +38,7 @@ def split_data(
 ]:
 	"""
 	Chia dữ liệu theo quy tắc:
-	- Nếu dataset_name == 'german'  -> Train/Test = 80/20
+	- Nếu dataset_name == 'german_credit'  -> Train/Test = 80/20
 	- Ngược lại                     -> Train/Valid/Test = 70/15/15
 
 	Nếu truyền `target_col`, sẽ stratify theo cột này.

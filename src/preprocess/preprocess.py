@@ -20,7 +20,7 @@ class CreditPreprocessor:
       - `embedding`: scale numeric + ordinal categorical
     """
 
-    def __init__(self, dataset_name: str = "german", model_type: str = "embedding") -> None:
+    def __init__(self, dataset_name: str = "german_credit", model_type: str = "embedding") -> None:
         self.dataset_name = dataset_name
         self.model_type = model_type
 
@@ -35,28 +35,40 @@ class CreditPreprocessor:
         self.num_ranges_: Dict[str, float] = {}
 
         self.configs: Dict[str, Dict[str, Any]] = {
-            "german": {
+            "german_credit": {
                 # Chú ý: Đưa "Age", "Employment" sang Actionable để áp dụng được luật >=
                 "actionable": [
-                    "Amount", "Duration", "Purpose", "InstallmentRate", 
+                    "Amount", "Duration", "InstallmentRate", 
                     "OtherDebtors", "OtherPlans", "Telephone", 
-                    "ExistingCredits", "Status", "Savings"
+                    "ExistingCredits", "Status", "Savings", "Property"
                 ],
                 
                 # Nhóm 1 & 2: Khóa chặt để tránh đưa ra lời khuyên phi thực tế hoặc phi đạo đức
                 "immutable": [
-                    "PersonalStatus", "ForeignWorker", "History", "Liable", 
-                    "Age", "Employment", "ResidenceSince", "Job", "Housing", "Property"
+                    "PersonalStatus", "ForeignWorker", "History", "Liable", "Purpose", 
+                    "Age", "Employment", "ResidenceSince", "Job", "Housing"
                 ],
                 
                 # Ép logic 1 chiều cho các biến Actionable
                 "causal_rules": [
-                    {"feature": "Amount", "type": "<="},           # Khuyên giảm số tiền vay
-                    #{"feature": "ExistingCredits", "type": "<="},  # Khuyên trả bớt nợ cũ
-                    #{"feature": "Status", "type": ">="},           # Cải thiện số dư tài khoản
-                    #{"feature": "Savings", "type": ">="}           # Tăng tiền tiết kiệm
-                    {"feature": "Duration", "type": "<="},         # Khuyên giảm thời gian vay
-
+                    {"feature": "Amount", "type": "<="},             # Khuyên giảm số tiền vay
+                    # {"feature": "ExistingCredits", "type": "<="},  # Khuyên trả bớt nợ cũ
+                    # {"feature": "Status", "type": ">="},           # Cải thiện số dư tài khoản
+                    # {"feature": "Savings", "type": ">="},          # Tăng tiền tiết kiệm
+                    {"feature": "Duration", "type": "<="},           # Khuyên giảm thời gian vay
+                    {"feature": "InstallmentRate", "type": ">="},    # Khuyên tăng lệ trả góp
+                    {"feature": "ExistingCredits", "type": "<="},    # Khuyên giảm số khoản vay mở hiện tại 
+                    # cho tất cả các biến immutable là không đổi
+                    {"feature": "PersonalStatus", "type": "=="},
+                    {"feature": "ForeignWorker", "type": "=="},
+                    {"feature": "History", "type": "=="},
+                    {"feature": "Liable", "type": "=="},
+                    {"feature": "Purpose", "type": "=="},
+                    {"feature": "Age", "type": "=="},
+                    {"feature": "Employment", "type": "=="},
+                    {"feature": "ResidenceSince", "type": "=="},
+                    {"feature": "Job", "type": "=="},
+                    {"feature": "Housing", "type": "=="}
                 ],
             },
             "lending_club": {
@@ -69,10 +81,14 @@ class CreditPreprocessor:
             },
             "gmsc": {
                 "actionable": ["age", "MonthlyIncome", "DebtRatio", "NumberOfOpenCreditLinesAndLoans"],
-                "immutable": ["NumberOfTime30-59DaysPastDueNotWorse"],
+                "immutable": ["NumberOfTime30-59DaysPastDueNotWorse", "NumberOfDependents", 
+                              "NumberOfTime60-89DaysPastDueNotWorse", "NumberRealEstateLoansOrLines", 
+                              "NumberOfTimes90DaysLate", "RevolvingUtilizationOfUnsecuredLines"],
                 "causal_rules": [
-                    {"feature": "age", "type": ">="},         # Tuổi chỉ có thể tăng
-                    {"feature": "MonthlyIncome", "type": ">="}# Thu nhập khuyến khích không giảm
+                    {"feature": "age", "type": ">="},          # Tuổi chỉ có thể tăng
+                    {"feature": "MonthlyIncome", "type": ">="}, # Thu nhập khuyến khích không giảm
+                    {"feature": "DebtRatio", "type": "<="},     # Khuyến khích giảm DebtRatio
+                    {"feature": "NumberOfOpenCreditLinesAndLoans", "type": "<="} # Khuyến khích giảm số lượng khoản vay mở
                 ],
             },
         }
