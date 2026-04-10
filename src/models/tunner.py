@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import copy
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, Iterable, List, Optional
@@ -7,10 +5,12 @@ from typing import Any, Callable, Dict, Iterable, List, Optional
 import numpy as np
 import optuna
 import torch
-from sklearn.metrics import accuracy_score, log_loss, roc_auc_score
+from sklearn.metrics import accuracy_score, log_loss, roc_auc_score, average_precision_score
+from sklearn.metrics import precision_recall_curve
+from sklearn.utils.class_weight import compute_class_weight
 from torch import nn
 
-from .trainer import predict, train_model
+from .trainer import WeightedBCELoss, predict, set_prediction_threshold, train_model
 
 
 # =========================
@@ -101,6 +101,16 @@ def _collect_targets(loader: Iterable) -> np.ndarray:
     return np.concatenate(ys, axis=0)
 
 
+def _compute_class_weight_tensor(y_true: np.ndarray) -> torch.Tensor:
+    y_true = np.asarray(y_true).reshape(-1).astype(int)
+    classes = np.array([0, 1], dtype=int)
+    if not np.isin(classes, np.unique(y_true)).all():
+        raise ValueError("Train split phải chứa đủ cả 2 lớp 0 và 1 để tính class weight.")
+
+    class_weights = compute_class_weight(class_weight="balanced", classes=classes, y=y_true)
+    return torch.tensor(class_weights, dtype=torch.float32)
+
+
 def _binary_metrics(y_true: np.ndarray, prob: np.ndarray) -> Dict[str, float]:
     pred = (prob >= 0.5).astype(int)
     out = {
@@ -114,7 +124,31 @@ def _binary_metrics(y_true: np.ndarray, prob: np.ndarray) -> Dict[str, float]:
         out["logloss"] = float(log_loss(y_true, prob, labels=[0, 1]))
     except Exception:
         out["logloss"] = float("nan")
+    try:
+        out["pr_auc"] = float(average_precision_score(y_true, prob))
+    except Exception:
+        out["pr_auc"] = float("nan")
     return out
+
+
+def _find_best_threshold_by_f1(y_true: np.ndarray, prob: np.ndarray) -> tuple[float, float]:
+    y_true = np.asarray(y_true).reshape(-1).astype(int)
+    prob = np.asarray(prob).reshape(-1).astype(float)
+
+    if y_true.size == 0:
+        raise ValueError("Không thể tune threshold trên tập rỗng.")
+
+    precision, recall, thresholds = precision_recall_curve(y_true, prob)
+    if thresholds.size == 0:
+        return 0.5, 0.0
+
+    precision = precision[:-1]
+    recall = recall[:-1]
+    denom = precision + recall
+    f1_scores = np.divide(2.0 * precision * recall, denom, out=np.zeros_like(denom, dtype=float), where=denom > 0)
+
+    best_idx = int(np.argmax(f1_scores))
+    return float(thresholds[best_idx]), float(f1_scores[best_idx])
 
 
 @dataclass
@@ -163,8 +197,11 @@ def tune_torch_binary_model(
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+    train_targets = _collect_targets(train_loader)
+    class_weight_tensor = _compute_class_weight_tensor(train_targets)
+
     if criterion_builder is None:
-        criterion_builder = lambda cfg: nn.BCELoss()
+        criterion_builder = lambda cfg: WeightedBCELoss(class_weight_tensor)
 
     if optimizer_builder is None:
         def optimizer_builder(m: nn.Module, cfg: Dict[str, Any]) -> torch.optim.Optimizer:
@@ -237,11 +274,18 @@ def tune_torch_binary_model(
     best_model.load_state_dict(best_state)
     best_model.to(device)
 
+    val_probs_t, _ = predict(best_model, val_loader, device=device, threshold=0.5)
+    val_targets = _collect_targets(val_loader)
+    best_threshold, best_threshold_f1 = _find_best_threshold_by_f1(val_targets, val_probs_t.cpu().numpy())
+    set_prediction_threshold(best_model, best_threshold)
+
     return {
         "study": study,
         "best_model": best_model,
         "best_config": best_cfg,
         "best_score": float(study.best_value),
+        "best_threshold": float(best_threshold),
+        "best_threshold_f1": float(best_threshold_f1),
         "trials": trials,
     }
 

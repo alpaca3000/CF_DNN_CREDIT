@@ -1,12 +1,16 @@
-# chứa hàm train_model() nhận model, train loader, val loader, test loader, config (số epoch, lr,...) và trả về model đã train xong cùng các metric trên val/test, tính toán loss, cập nhật trọng số, early stopping nếu không giảm loss tránh overfitting, lưu model tốt nhất dựa trên metric val/test (ví dụ AUC) để sau này load lại dùng cho giải thích mô hình. Hàm này sẽ được gọi trong main.py để huấn luyện các mô hình DNN. Các mô hình tree sẽ được huấn luyện bằng cách gọi trực tiếp hàm fit() của xgboost hoặc randomforest trong main.py.
-
-from __future__ import annotations
+# chứa hàm train_model() nhận model, train loader, val loader, test loader, 
+# config (số epoch, lr,...) và trả về model đã train xong cùng các metric trên val/test, 
+# tính toán loss, cập nhật trọng số, early stopping nếu không giảm loss tránh overfitting, 
+# lưu model tốt nhất dựa trên metric val/test để sau này load lại dùng cho giải thích mô hình. 
+# Hàm này sẽ được gọi trong main.py để huấn luyện các mô hình DNN. 
+# Các mô hình tree sẽ được huấn luyện bằng cách gọi trực tiếp hàm fit() của xgboost hoặc randomforest trong main.py.
 
 import copy
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Tuple, Sequence
 
 import torch
 from torch import nn
+import torch.nn.functional as F
 
 
 def _to_device(x: Any, device: torch.device) -> Any:
@@ -45,6 +49,34 @@ def _forward_with_target(
 
     raise ValueError("Batch không hợp lệ. Cần (x, y) hoặc (x_num, x_cat, y).")
 
+
+class WeightedBCELoss(nn.Module):
+    def __init__(self, class_weights: Sequence[float]) -> None:
+        super().__init__()
+        weight_tensor = torch.as_tensor(class_weights, dtype=torch.float32)
+        if weight_tensor.numel() != 2:
+            raise ValueError("WeightedBCELoss yêu cầu đúng 2 class weights cho bài toán nhị phân.")
+        self.register_buffer("class_weights", weight_tensor)
+
+    def forward(self, probs: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
+        targets = targets.float().view(-1, 1)
+        probs = probs.view(-1, 1)
+        class_weights = self.class_weights.to(targets.device)
+        sample_weights = class_weights[targets.long().view(-1)].view_as(targets)
+        losses = F.binary_cross_entropy(probs, targets, reduction="none")
+        return (losses * sample_weights).mean()
+
+
+def set_prediction_threshold(model: nn.Module, threshold: float) -> None:
+    model.__dict__["prediction_threshold"] = float(threshold)
+
+
+def get_prediction_threshold(model: nn.Module, default: float = 0.5) -> float:
+    threshold = getattr(model, "prediction_threshold", default)
+    try:
+        return float(threshold)
+    except (TypeError, ValueError):
+        return float(default)
 
 def _run_epoch(
     model: nn.Module,
@@ -105,6 +137,8 @@ def train_model(
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     model.to(device)
+    if isinstance(criterion, nn.Module):
+        criterion = criterion.to(device)
 
     history: Dict[str, List[float]] = {
         "train_loss": [],
@@ -166,6 +200,7 @@ def predict(
     model: nn.Module,
     test_loader: Iterable,
     device: Optional[torch.device] = None,
+    threshold: Optional[float] = None,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     """
     Trả về:
@@ -179,6 +214,9 @@ def predict(
 
     model.to(device)
     model.eval()
+
+    if threshold is None:
+        threshold = get_prediction_threshold(model, default=0.5)
 
     all_probs: List[torch.Tensor] = []
     all_preds: List[torch.Tensor] = []
@@ -203,7 +241,7 @@ def predict(
             probs = model(x)
 
         probs = probs.view(-1)
-        preds = (probs >= 0.5).long()
+        preds = (probs >= threshold).long()
 
         all_probs.append(probs.cpu())
         all_preds.append(preds.cpu())

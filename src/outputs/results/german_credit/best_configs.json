@@ -1,12 +1,14 @@
 {
   "embed_mlp": {
-    "best_score": 0.8223809523809524,
+    "best_score": 0.9188606308343745,
+    "best_threshold": 0.26096275448799133,
+    "best_threshold_f1": 0.881578947368421,
     "best_config": {
-      "hidden_h1": 256,
-      "hidden_h2": 128,
-      "dropout": 0.28242799368681437,
-      "lr": 0.0037183641805732083,
-      "weight_decay": 3.972110727381911e-06,
+      "hidden_h1": 128,
+      "hidden_h2": 32,
+      "dropout": 0.4795542149013333,
+      "lr": 0.00853618986286683,
+      "weight_decay": 0.0002661901888489054,
       "input_num_dim": 7,
       "cat_dims": [
         4,

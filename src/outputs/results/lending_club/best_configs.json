@@ -1,12 +1,14 @@
 {
   "embed_mlp": {
-    "best_score": 0.6938093750000001,
+    "best_score": 0.6029937114203999,
+    "best_threshold": 0.3807680606842041,
+    "best_threshold_f1": 0.6184812442817932,
     "best_config": {
       "hidden_h1": 128,
       "hidden_h2": 32,
-      "dropout": 0.4795542149013333,
-      "lr": 0.00853618986286683,
-      "weight_decay": 0.0002661901888489054,
+      "dropout": 0.4686415427405163,
+      "lr": 0.0009007943098030559,
+      "weight_decay": 0.00016811368413378425,
       "input_num_dim": 14,
       "cat_dims": [
         2,

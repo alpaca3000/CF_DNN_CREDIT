@@ -22,7 +22,7 @@ import numpy as np
 import pandas as pd
 import torch
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score, roc_auc_score, f1_score
+from sklearn.metrics import accuracy_score, roc_auc_score, f1_score, average_precision_score
 from torch.utils.data import DataLoader, TensorDataset
 
 from src.models.classic_mlp import ClassicMLP
@@ -498,11 +498,12 @@ def tune_all_models(
             val_loader=classic_loaders["val_loader"],
             search_space=space,
             n_trials=n_trials,
-            select_metric="auc",
+            select_metric="pr_auc",
             verbose=verbose,
         )
         results["classic_mlp"] = result
-        print(f"  Best AUC: {result['best_score']:.6f}")
+        print(f"  Best PR-AUC: {result['best_score']:.6f}")
+        print(f"  Best threshold: {result.get('best_threshold', 0.5):.6f}")
     
     if "embed_mlp" in models:
         if "embedding" not in data["splits"] or "embedding" not in data["metadata"]:
@@ -528,11 +529,12 @@ def tune_all_models(
             val_loader=embedding_loaders["val_loader"],
             search_space=space,
             n_trials=n_trials,
-            select_metric="auc",
+            select_metric="pr_auc",
             verbose=verbose,
         )
         results["embed_mlp"] = result
-        print(f"  Best AUC: {result['best_score']:.6f}")
+        print(f"  Best PR-AUC: {result['best_score']:.6f}")
+        print(f"  Best threshold: {result.get('best_threshold', 0.5):.6f}")
     
     if "xgboost" in models:
         if "tree" not in data["splits"]:
@@ -548,11 +550,11 @@ def tune_all_models(
             y_val=y_val,
             search_space=space,
             n_trials=n_trials,
-            select_metric="auc",
+            select_metric="pr_auc",
             verbose=verbose,
         )
         results["xgboost"] = result
-        print(f"  Best AUC: {result['best_score']:.6f}")
+        print(f"  Best PR-AUC: {result['best_score']:.6f}")
     
     if "random_forest" in models:
         if "tree" not in data["splits"]:
@@ -568,11 +570,11 @@ def tune_all_models(
             y_val=y_val,
             search_space=space,
             n_trials=n_trials,
-            select_metric="auc",
+            select_metric="pr_auc",
             verbose=verbose,
         )
         results["random_forest"] = result
-        print(f"  Best AUC: {result['best_score']:.6f}")
+        print(f"  Best PR-AUC: {result['best_score']:.6f}")
     
     return results
 
@@ -650,17 +652,22 @@ def evaluate_models(
             acc = accuracy_score(y_test, pred_np)
             auc = roc_auc_score(y_test, prob_np)
             f1 = f1_score(y_test, pred_np)
+            pr_auc = average_precision_score(1 - y_test, 1 - prob_np)
             
             eval_results[model_name] = {
                 "test_accuracy": float(acc),
                 "test_auc": float(auc),
                 "test_f1": float(f1),
+                "test_pr_auc": float(pr_auc),
                 "val_auc": float(tuning_result["best_score"]),
+                "best_threshold": tuning_result.get("best_threshold", None),
+                "best_threshold_f1": tuning_result.get("best_threshold_f1", None),
                 "best_config": best_config,
             }
             
             print(f"  Accuracy: {acc:.6f}")
             print(f"  AUC: {auc:.6f}")
+            print(f"  PR AUC: {pr_auc:.6f}")
             print(f"  F1: {f1:.6f}")
         
         except Exception as e:
@@ -712,7 +719,10 @@ def save_results(
                 "test_accuracy": eval_res["test_accuracy"],
                 "test_auc": eval_res["test_auc"],
                 "test_f1": eval_res["test_f1"],
+                "test_pr_auc": eval_res["test_pr_auc"],
                 "val_auc": eval_res["val_auc"],
+                "best_threshold": eval_res.get("best_threshold", None),
+                "best_threshold_f1": eval_res.get("best_threshold_f1", None),
             }
     
     summary_file = ds_results_dir / "summary.json"
@@ -731,6 +741,8 @@ def save_results(
     for model_name, tuning_result in tuning_results.items():
         best_configs[model_name] = {
             "best_score": float(tuning_result.get("best_score", float("nan"))),
+            "best_threshold": tuning_result.get("best_threshold", None),
+            "best_threshold_f1": tuning_result.get("best_threshold_f1", None),
             "best_config": tuning_result.get("best_config", {}),
         }
     best_cfg_file = ds_results_dir / "best_configs.json"
