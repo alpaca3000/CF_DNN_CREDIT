@@ -33,7 +33,7 @@ from src.models.tunner import (
     tune_torch_binary_model,
 )
 from src.models.trainer import predict
-from src.preprocess.preprocess import CreditPreprocessor
+from src.data_processing.preprocess import CreditPreprocessor
 
 # ====================
 # Configuration

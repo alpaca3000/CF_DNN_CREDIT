@@ -11,7 +11,7 @@ from src.models.model_wrapper import EmbedMLPWrapper
 from src.preprocess.preprocess import CreditPreprocessor
 from src.cf.metric_evaluator import CFMEvaluator
 from src.cf.cfm_fm.generator import CFMFWGenerator
-from src.preprocess.utils import load_data, split_data
+from src.data_processing.utils import load_data, split_data
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
