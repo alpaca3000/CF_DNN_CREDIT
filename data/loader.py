@@ -85,12 +85,28 @@ for col, mapper in code_maps.items():
 gcredit = gcredit_mapped.copy()
 
 
-# 2. TẢI DỮ LIỆU LENDING CLUB TRONG FILE ZIP .GZ từ Kaggle trong data/
-# lending_club = pd.read_csv("data/lending_club_loan.csv.gz", compression='gzip')
-# lending_club['loan_status'] = lending_club['loan_status'].apply(lambda x: 1 if x == 'Fully Paid' else 0) # charge off
+# 2. LOAD DỮ LIỆU LENDING CLUB 
+lending_file_path = DATA_DIR / "lendingclub.csv"
 
-# 3. LƯU VÀO DATA
-# RAW_DIR.mkdir(parents=True, exist_ok=True)
-# PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
+if lending_file_path.exists():
+    lending_club = pd.read_csv(lending_file_path)
+    # Vì file của bạn đã có sẵn cột 'target' (0 và 1), 
+    print(f"Đã load xong {len(lending_club)} dòng dữ liệu Lending Club.")
+else:
+    print("Cảnh báo: Không tìm thấy file lendingclub.csv trong thư mục data")
+
+# 3. LOAD DỮ LIỆU GMSC ĐÃ XỬ LÝ
+gmsc_file_path = DATA_DIR / "gmsc.csv"
+
+if gmsc_file_path.exists():
+    gmsc_cleaned = pd.read_csv(gmsc_file_path)
+    print(f"Đã nạp dữ liệu GMSC sạch: {gmsc_cleaned.shape}")
+else:
+    print("Cảnh báo: Chưa tìm thấy file gmsc.csv sạch trong thư mục data.")
+    
+# 3. LƯU VÀO THƯ MỤC DATA
 gcredit.to_csv(DATA_DIR / "german_credit.csv", index=False)
-#lending_club.to_csv("DATA_DIR/lending_club_loan.csv", index=False)
+
+if 'lending_club' in locals():
+    # Lưu ra một file tên ngắn gọn là 'lending.csv' để dễ gọi trong lệnh train
+    lending_club.to_csv(DATA_DIR / "lending.csv", index=False)

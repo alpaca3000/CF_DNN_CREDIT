@@ -72,24 +72,49 @@ class CreditPreprocessor:
                 ],
             },
             "lending_club": {
-                "actionable": ["loan_amnt", "term", "annual_inc", "emp_length"],
-                "immutable": ["addr_state"],
-                "causal_rules": [
-                    {"feature": "emp_length", "type": ">="},  # Thâm niên không giảm
-                    {"feature": "annual_inc", "type": ">="}   # Thu nhập khuyến khích không giảm
+                "actionable": [ 
+                    "log_loan_amnt", "log_annual_inc", "dti", "revol_util", "inst_to_inc_ratio"
                 ],
+                "immutable": [ 
+                    "term_num", "sub_grade", "home_ownership", "purpose_grouped", 
+                    "credit_hist_months", "state_risk_score"
+                ],
+                "categorical": [
+                    "sub_grade", "home_ownership", "purpose_grouped"
+                ],
+                "numerical": [
+                    "log_loan_amnt", "term_num", "log_annual_inc", "dti", 
+                    "revol_util", "log_revol_bal", "credit_hist_months", 
+                    "inst_to_inc_ratio", "state_risk_score", "emp_length"
+                ],
+                "target": "target"
             },
             "gmsc": {
-                "actionable": ["age", "MonthlyIncome", "DebtRatio", "NumberOfOpenCreditLinesAndLoans"],
-                "immutable": ["NumberOfTime30-59DaysPastDueNotWorse", "NumberOfDependents", 
-                              "NumberOfTime60-89DaysPastDueNotWorse", "NumberRealEstateLoansOrLines", 
-                              "NumberOfTimes90DaysLate", "RevolvingUtilizationOfUnsecuredLines"],
-                "causal_rules": [
-                    {"feature": "age", "type": ">="},          # Tuổi chỉ có thể tăng
-                    {"feature": "MonthlyIncome", "type": ">="}, # Thu nhập khuyến khích không giảm
-                    {"feature": "DebtRatio", "type": "<="},     # Khuyến khích giảm DebtRatio
-                    {"feature": "NumberOfOpenCreditLinesAndLoans", "type": "<="} # Khuyến khích giảm số lượng khoản vay mở
+                "actionable": [ # Các biến có thể tác động (Mutable)
+                    "RevolvingUtilizationOfUnsecuredLines", 
+                    "DebtRatio", 
+                    "MonthlyIncome", 
+                    "NumberOfOpenCreditLinesAndLoans"
                 ],
+                "immutable": [ # Các biến cố định (Immutable)
+                    "age", 
+                    "NumberOfTime30-59DaysPastDueNotWorse",
+                    "NumberOfTimes90DaysLate", 
+                    "NumberRealEstateLoansOrLines", 
+                    "NumberOfTime60-89DaysPastDueNotWorse", 
+                    "NumberOfDependents"
+                ],
+                "categorical": [
+                    "NumberOfDependents" # Giữ biến này là categorical để dùng Embedding
+                ],
+                "numerical": [
+                    "RevolvingUtilizationOfUnsecuredLines", "age", 
+                    "NumberOfTime30-59DaysPastDueNotWorse", "DebtRatio", 
+                    "MonthlyIncome", "NumberOfOpenCreditLinesAndLoans", 
+                    "NumberOfTimes90DaysLate", "NumberRealEstateLoansOrLines", 
+                    "NumberOfTime60-89DaysPastDueNotWorse"
+                ],
+                "target": "SeriousDlqin2yrs"
             },
         }
 
