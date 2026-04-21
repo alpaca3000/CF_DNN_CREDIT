@@ -6,6 +6,8 @@ from typing import Optional, Sequence, Tuple
 
 import torch
 import torch.nn as nn
+import numpy as np
+from typing import Dict, Any
 
 
 def _calc_emb_dim(cardinality: int) -> int:
@@ -102,3 +104,37 @@ class EmbedMLP(nn.Module):
             x = x_num
 
         return self.mlp(x)
+
+def build_embed_mlp(cfg: Dict[str, Any]) -> EmbedMLP:
+    cfg = dict(cfg)
+    input_num_dim = cfg.pop("input_num_dim", None)
+    cat_dims = cfg.pop("cat_dims", [])
+    if input_num_dim is None:
+        raise ValueError("input_num_dim required")
+
+    h1 = int(cfg.get("hidden_h1", 128))
+    h2 = int(cfg.get("hidden_h2", 64))
+    hidden_dims = (h1, h2)
+
+    return EmbedMLP(
+        input_num_dim=input_num_dim,
+        cat_dims=cat_dims,
+        emb_dims=cfg.get("emb_dims", None),
+        hidden_dims=hidden_dims,
+        dropout=float(cfg.get("dropout", 0.3)),
+    )
+
+def get_embed_mlp_search_space(input_num_dim: int, cat_dims: list[int]) -> Dict[str, Any]:
+    return {
+        "input_num_dim": input_num_dim,
+        # keep constant (not an Optuna categorical choice)
+        "cat_dims": np.asarray(cat_dims, dtype=int),
+        "emb_dims": None,
+        "hidden_h1": [64, 128, 256],
+        "hidden_h2": [32, 64, 128],
+        "dropout": {"type": "float", "low": 0.1, "high": 0.5},
+        "lr": {"type": "float", "low": 1e-4, "high": 1e-2, "log": True},
+        "weight_decay": {"type": "float", "low": 1e-6, "high": 1e-3, "log": True},
+        "max_epochs": 100,
+        "patience": 15,
+    }
