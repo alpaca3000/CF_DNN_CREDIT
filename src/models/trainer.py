@@ -203,6 +203,7 @@ def predict(
     threshold: Optional[float] = None,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     """
+    Dự báo xác suất và nhãn dựa trên test_loader.
     Trả về:
       - probs: xác suất dự báo (N,)
       - preds: nhãn dự báo nhị phân (N,)
