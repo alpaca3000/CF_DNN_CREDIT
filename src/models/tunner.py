@@ -125,7 +125,7 @@ def _binary_metrics(y_true: np.ndarray, prob: np.ndarray) -> Dict[str, float]:
     except Exception:
         out["logloss"] = float("nan")
     try:
-        out["pr_auc"] = float(average_precision_score(y_true, prob))
+        out["pr_auc"] = float(average_precision_score(1 - y_true, 1 - prob))
     except Exception:
         out["pr_auc"] = float("nan")
     return out
@@ -149,6 +149,43 @@ def _find_best_threshold_by_f1(y_true: np.ndarray, prob: np.ndarray) -> tuple[fl
 
     best_idx = int(np.argmax(f1_scores))
     return float(thresholds[best_idx]), float(f1_scores[best_idx])
+    # y_true = np.asarray(y_true).reshape(-1).astype(int)
+    # prob_good = np.asarray(prob).reshape(-1).astype(float)
+
+    # if y_true.size == 0:
+    #     raise ValueError("Không thể tune threshold trên tập rỗng.")
+
+    # # 1. Đảo ngược dữ liệu để tập trung vào Lớp 0 (Nợ xấu)
+    # # Vì 1 là Tốt, 0 là Xấu -> Lấy (1 - y) sẽ biến Xấu thành 1, Tốt thành 0
+    # y_bad = 1 - y_true
+    
+    # # Xác suất là Nợ xấu = 1 - Xác suất Tốt
+    # prob_bad = 1.0 - prob_good
+
+    # # 2. Tính PR Curve cho Nợ xấu
+    # precision, recall, thresholds_bad = precision_recall_curve(y_bad, prob_bad)
+    
+    # if thresholds_bad.size == 0:
+    #     return 0.5, 0.0
+
+    # precision = precision[:-1]
+    # recall = recall[:-1]
+    # denom = precision + recall
+    # f1_scores = np.divide(2.0 * precision * recall, denom, out=np.zeros_like(denom, dtype=float), where=denom > 0)
+
+    # # 3. Tìm vị trí F1 cao nhất cho Nợ xấu
+    # best_idx = int(np.argmax(f1_scores))
+    # best_thresh_bad = float(thresholds_bad[best_idx])
+    # best_f1_bad = float(f1_scores[best_idx])
+
+    # # 4. ĐỔI NGƯỠNG TRỞ LẠI HỆ QUY CHIẾU P(TỐT)
+    # # Quy tắc: Bị coi là Nợ xấu nếu P(Xấu) >= thresh_bad
+    # # Tương đương: 1 - P(Tốt) >= thresh_bad  --> P(Tốt) <= 1 - thresh_bad
+    # # Vậy ngưỡng cần vượt qua để được tính là Tốt chính là: 1 - thresh_bad
+    # best_thresh_good = 1.0 - best_thresh_bad
+
+    # # Trả về: [Ngưỡng duyệt vay P(Tốt)], [F1 Score của Nợ xấu tại ngưỡng đó]
+    # return best_thresh_good, best_f1_bad
 
 
 @dataclass
