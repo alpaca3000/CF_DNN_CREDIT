@@ -1,14 +1,14 @@
 {
   "embed_mlp": {
-    "best_score": 0.6029937114203999,
-    "best_threshold": 0.3807680606842041,
-    "best_threshold_f1": 0.6184812442817932,
+    "best_score": 0.6239238517510847,
+    "best_threshold": 0.28691309690475464,
+    "best_threshold_f1": 0.774618585298197,
     "best_config": {
-      "hidden_h1": 128,
-      "hidden_h2": 32,
-      "dropout": 0.4686415427405163,
-      "lr": 0.0009007943098030559,
-      "weight_decay": 0.00016811368413378425,
+      "hidden_h1": 256,
+      "hidden_h2": 128,
+      "dropout": 0.28242799368681437,
+      "lr": 0.0037183641805732083,
+      "weight_decay": 3.972110727381911e-06,
       "input_num_dim": 14,
       "cat_dims": [
         2,
@@ -16,9 +16,16 @@
         35,
         5,
         3,
-        14
+        13
       ],
-      "emb_dims": null,
+      "emb_dims": [
+        1,
+        4,
+        18,
+        3,
+        2,
+        7
+      ],
       "max_epochs": 100,
       "patience": 15
     }
