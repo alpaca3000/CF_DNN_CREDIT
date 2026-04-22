@@ -17,7 +17,7 @@ def load_data(dataset_name: str) -> pd.DataFrame:
 	file_map = {
 		"german_credit": "german_credit.csv",
 		"gmsc": "gmsc.csv",
-		"lending_club": "lending_club_balanced_sample_10k.csv",
+		"lending_club": "lendingclub.csv",
 	}
 
 	if dataset_name not in file_map:
