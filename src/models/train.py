@@ -319,7 +319,7 @@ def main(
     elif dataset == "gmsc":
         # Khởi tạo Domain Prep cho gmsc sau này
         pass
-    elif dataset == "lending_club":
+    elif dataset == "lendingclub":
         # Khởi tạo Domain Prep cho lending_club sau này
         pass
 
