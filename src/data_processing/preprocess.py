@@ -122,13 +122,25 @@ class CreditPreprocessor:
         if not isinstance(X, pd.DataFrame):
             X = pd.DataFrame(X)
         return X.copy()
+    
+    def _infer_feature_types(self, X: pd.DataFrame) -> tuple[List[str], List[str]]:
+        # 1. Kiểm tra cấu hình có sẵn cho dataset này không
+        cfg = self.configs.get(self.dataset_name, {})
+        cfg_cat = cfg.get("categorical", [])
+        cfg_num = cfg.get("numerical", [])
 
-    @staticmethod
-    def _infer_feature_types(X: pd.DataFrame) -> tuple[List[str], List[str]]:
+        if cfg_cat or cfg_num:
+            # Nếu có cấu hình, ưu tiên lấy các cột đó (nếu chúng tồn tại trong X)
+            cat_cols = [c for c in cfg_cat if c in X.columns]
+            # Các cột numerical là những cột còn lại
+            num_cols = [c for c in X.columns if c not in cat_cols]
+            return num_cols, cat_cols
+        
+        # 2. Nếu không có cấu hình, tự động suy luận theo kiểu dữ liệu
         num_cols = X.select_dtypes(include=[np.number, "bool"]).columns.tolist()
         cat_cols = [c for c in X.columns if c not in num_cols]
         return num_cols, cat_cols
-
+    
     def _clean_features(self, X: pd.DataFrame, is_fit: bool) -> pd.DataFrame:
         X = X.copy()
 
@@ -153,6 +165,7 @@ class CreditPreprocessor:
         return X[ordered_cols]
 
     def fit(self, X_train: pd.DataFrame) -> "CreditPreprocessor":
+
         X = self._validate_input(X_train)
         self.num_features_, self.cat_features_ = self._infer_feature_types(X)
         X = self._clean_features(X, is_fit=True)
