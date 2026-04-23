@@ -37,13 +37,9 @@ from src.data_processing.utils import load_data, split_data, get_target_col
 
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 DATA_DIR = PROJECT_ROOT / "data"
-OUTPUT_DIR = PROJECT_ROOT / "src" / "outputs"
-MODELS_DIR = OUTPUT_DIR / "models"
-RESULTS_DIR = OUTPUT_DIR / "results"
+OUTPUT_DIR = PROJECT_ROOT / "outputs"
 
 OUTPUT_DIR.mkdir(exist_ok=True)
-MODELS_DIR.mkdir(exist_ok=True)
-RESULTS_DIR.mkdir(exist_ok=True)
 
 def tune_model(
     model: str,
@@ -221,9 +217,9 @@ def save_results(
         tunning_result: kết quả từ tune_model (best_model, best_score, best_params)
         eval_result: kết quả từ evaluate_model (metrics trên test set)
     """
-    ds_results_dir = RESULTS_DIR / dataset
-    ds_models_dir = MODELS_DIR / dataset
-    ds_results_dir.mkdir(exist_ok=True)
+    ds_output_dir = OUTPUT_DIR / dataset
+    ds_models_dir = ds_output_dir / "models"
+    ds_output_dir.mkdir(exist_ok=True)
     ds_models_dir.mkdir(exist_ok=True)
 
     best_model = tuning_result["best_model"]
@@ -234,7 +230,7 @@ def save_results(
         with open(model_path, "wb") as f:
             pickle.dump(best_model, f)
 
-    best_cfg_file = ds_results_dir / "best_configs.json"
+    best_cfg_file = ds_models_dir / "best_configs.json"
     best_configs = {}
     if best_cfg_file.exists():
         with open(best_cfg_file, "r") as f:
@@ -246,27 +242,23 @@ def save_results(
         if resolved is not None:
             best_config["emb_dims"] = [int(d) for d in resolved]
 
-    best_configs[model] = {
-        "best_score": float(tuning_result.get("best_score", float("nan"))),
-        "best_threshold": tuning_result.get("best_threshold", None),
-        "best_threshold_f1": tuning_result.get("best_threshold_f1", None),
-        "best_config": best_config,
-    }
+    # Chỉ lưu cấu hình tốt nhất cho từng model
+    best_configs[model] = best_config
     with open(best_cfg_file, "w") as f:
         json.dump(_to_jsonable(best_configs), f, indent=2)
 
-    eval_file = ds_results_dir / "eval_results.json"
+    eval_file = ds_models_dir / "eval_results.json"
     eval_results = {}
     if eval_file.exists():
         with open(eval_file, "r") as f:
             eval_results = json.load(f)
 
+    # Chỉ lưu metrics/kết quả đánh giá cho từng model
     eval_results[model] = {
         **eval_result,
-        "val_auc": float(tuning_result.get("best_score", float("nan"))),
+        "val_pr_auc": float(tuning_result.get("best_score", float("nan"))),
         "best_threshold": tuning_result.get("best_threshold", None),
         "best_threshold_f1": tuning_result.get("best_threshold_f1", None),
-        "best_config": best_config,
     }
     with open(eval_file, "w") as f:
         json.dump(_to_jsonable(eval_results), f, indent=2)
@@ -375,7 +367,7 @@ def main(
     )
 
     print("\n" + "=" * 60)
-    print(f"RESULTS SAVED AT {RESULTS_DIR / dataset}")
+    print(f"RESULTS SAVED AT {OUTPUT_DIR / dataset / 'models'}")
     print("=" * 60)
 
 

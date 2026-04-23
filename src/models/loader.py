@@ -8,35 +8,55 @@ import json
 import pickle
 from pathlib import Path
 import sys
-from typing import Any, cast
+from typing import cast
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-OUTPUTS_DIR = PROJECT_ROOT / "src" / "outputs"
-MODELS_DIR = OUTPUTS_DIR / "models"
-RESULTS_DIR = OUTPUTS_DIR / "results"
+OUTPUTS_DIR = PROJECT_ROOT / "outputs"
+
+
+def _resolve_best_config_path(dataset: str) -> Path:
+    candidates = [
+        OUTPUTS_DIR / dataset / "models" / "best_configs.json",  # cấu trúc mới
+        OUTPUTS_DIR / "results" / dataset / "best_configs.json",  # cấu trúc cũ (root/outputs)
+        PROJECT_ROOT / "src" / "outputs" / "results" / dataset / "best_configs.json",  # cấu trúc cũ (src/outputs)
+    ]
+    for path in candidates:
+        if path.exists():
+            return path
+    raise FileNotFoundError(f"Không tìm thấy best config ở các vị trí: {candidates}")
+
+
+def _resolve_model_path(dataset: str, model_file: str) -> Path:
+    candidates = [
+        OUTPUTS_DIR / dataset / "models" / model_file,  # cấu trúc mới
+        OUTPUTS_DIR / "models" / dataset / model_file,  # cấu trúc cũ (root/outputs)
+        PROJECT_ROOT / "src" / "outputs" / "models" / dataset / model_file,  # cấu trúc cũ (src/outputs)
+    ]
+    for path in candidates:
+        if path.exists():
+            return path
+    raise FileNotFoundError(f"Không tìm thấy model '{model_file}' ở các vị trí: {candidates}")
 
 
 def _load_best_config(dataset: str, model_name: str) -> dict[str, Any]:
-    cfg_path = RESULTS_DIR / dataset / "best_configs.json"
-    if not cfg_path.exists():
-        raise FileNotFoundError(f"Không tìm thấy best config tại: {cfg_path}")
+    cfg_path = _resolve_best_config_path(dataset)
 
     with open(cfg_path, "r", encoding="utf-8") as f:
         cfg_json = json.load(f)
 
-    best_cfg = cfg_json.get(model_name, {}).get("best_config", {})
+    model_cfg_obj = cfg_json.get(model_name, {})
+    # Tương thích cả schema mới (config trực tiếp) và cũ (bọc trong best_config)
+    best_cfg = model_cfg_obj.get("best_config", model_cfg_obj) if isinstance(model_cfg_obj, dict) else {}
     if not best_cfg:
         raise ValueError(f"best_configs.json không có cấu hình cho {model_name}.")
     return best_cfg
 
 
 def load_embed_model(dataset: str, device: torch.device) -> EmbedMLP:
-    model_path = MODELS_DIR / dataset / "embed_mlp_best.pkl"
-    if not model_path.exists():
-        raise FileNotFoundError(f"Không tìm thấy model embed_mlp tại: {model_path}")
+    model_path = _resolve_model_path(dataset, "embed_mlp_best.pkl")
 
     best_cfg = _load_best_config(dataset, "embed_mlp")
 
@@ -65,9 +85,7 @@ def load_embed_model(dataset: str, device: torch.device) -> EmbedMLP:
 
 
 def load_classic_model(dataset: str, device: torch.device) -> ClassicMLP:
-    model_path = MODELS_DIR / dataset / "classic_mlp_best.pkl"
-    if not model_path.exists():
-        raise FileNotFoundError(f"Không tìm thấy model classic_mlp tại: {model_path}")
+    model_path = _resolve_model_path(dataset, "classic_mlp_best.pkl")
 
     best_cfg = _load_best_config(dataset, "classic_mlp")
 
@@ -94,9 +112,7 @@ def load_classic_model(dataset: str, device: torch.device) -> ClassicMLP:
 
 
 def load_xgboost_model(dataset: str) -> Any:
-    model_path = MODELS_DIR / dataset / "xgboost_best.pkl"
-    if not model_path.exists():
-        raise FileNotFoundError(f"Không tìm thấy model xgboost tại: {model_path}")
+    model_path = _resolve_model_path(dataset, "xgboost_best.pkl")
 
     with open(model_path, "rb") as f:
         model = pickle.load(f)
@@ -104,9 +120,7 @@ def load_xgboost_model(dataset: str) -> Any:
 
 
 def load_random_forest_model(dataset: str) -> Any:
-    model_path = MODELS_DIR / dataset / "random_forest_best.pkl"
-    if not model_path.exists():
-        raise FileNotFoundError(f"Không tìm thấy model random_forest tại: {model_path}")
+    model_path = _resolve_model_path(dataset, "random_forest_best.pkl")
 
     with open(model_path, "rb") as f:
         model = pickle.load(f)

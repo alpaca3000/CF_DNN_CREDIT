@@ -31,8 +31,8 @@ env/
 *.tmp
 
 # Project outputs (thường rất nặng)
-outputs/models/
-outputs/results/
+outputs/**/models/
+outputs/**/cf_explanations/
 
 # Data generated/raw lớn (nếu không muốn push)
 data/raw/
