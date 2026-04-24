@@ -93,7 +93,7 @@ def build_xgboost(cfg: Dict[str, Any]) -> Any:
         reg_lambda=float(cfg.get("reg_lambda", 1.0)),
         min_child_weight=float(cfg.get("min_child_weight", 1.0)),
         random_state=int(cfg.get("random_state", 42)),
-        n_jobs=int(cfg.get("n_jobs", -1)),
+        n_jobs=int(cfg.get("n_jobs", 1)),
     )
 
 # ====================
