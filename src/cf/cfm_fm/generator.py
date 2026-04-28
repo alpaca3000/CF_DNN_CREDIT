@@ -50,7 +50,13 @@ class CFMFWGenerator:
         print(" -> Huấn luyện mô hình Local Outlier Factor (LOF)...")
         # Scale dữ liệu train trước khi đưa vào LOF
         X_train_scaled = self.preprocessor.transform(self.X_train_raw)
-        self.plausibility_module = PlausibilityLOF(n_neighbors=20)
+        self.plausibility_module = PlausibilityLOF(n_neighbors=20, n_jobs=1)
+
+        print(f"DEBUG: X_train_scaled shape: {X_train_scaled.shape}")
+        if np.isnan(X_train_scaled).any() or np.isinf(X_train_scaled).any():
+            print("WARNING: Dữ liệu chứa NaN hoặc Inf, đang thực hiện dọn dẹp...")
+            X_train_scaled = np.nan_to_num(X_train_scaled)
+            
         self.plausibility_module.fit(X_train_scaled)
         
         # =================================================================
@@ -73,8 +79,8 @@ class CFMFWGenerator:
         self, 
         x_rejected: pd.Series, 
         num_cf: int = 5,
-        pop_size: int = 50, 
-        n_gen: int = 50, 
+        pop_size: int = 100, 
+        n_gen: int = 100, 
         k_neighbors: int = 50
     ) -> pd.DataFrame:
         """
@@ -151,8 +157,25 @@ class CFMFWGenerator:
         df_valid_cf = df_cf[df_cf['predicted_prob'] >= 0.50].reset_index(drop=True)
         
         x_orig_dict = x_rejected.to_dict()
-        all_features = self.metadata["num_features"] + self.metadata["cat_features"]
-        
+        num_features = self.metadata["num_features"] # Lấy danh sách biến liên tục
+        all_features = num_features + self.metadata["cat_features"]
+
+ 
+        # CẢI TIẾN: POST-HOC SPARSITY HANDLING (ÉP THƯA)
+        # Duyệt qua từng hồ sơ phản thực đã tìm được
+        for index, row in df_valid_cf.iterrows():
+            for col in num_features:
+                # Tính độ lệch tuyệt đối 
+                diff = abs(row[col] - x_orig_dict[col])
+                
+                # Định nghĩa ngưỡng (threshold)
+                # Thường dùng 1e-4 
+                threshold = 1e-4 
+                
+                # Nếu thay đổi quá nhỏ, ép về giá trị gốc để tăng Sparsity
+                if diff < threshold:
+                    df_valid_cf.at[index, col] = x_orig_dict[col]
+
         def count_changes(row):
             changes = 0
             for col in all_features:
