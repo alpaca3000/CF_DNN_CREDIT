@@ -145,7 +145,7 @@ def plausibility(
 #     if str(PROJECT_ROOT) not in sys.path:
 #         sys.path.insert(0, str(PROJECT_ROOT))
 
-#     from src.preprocess.preprocess import CreditPreprocessor
+#     from src.data_processing.preprocess import CreditPreprocessor
 #     from src.cf.cfm_fm.acme_weight import AcMEEngine
 #     from src.cf.cfm_fm.lof import PlausibilityLOF
 
