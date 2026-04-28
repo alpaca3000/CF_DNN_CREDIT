@@ -121,7 +121,7 @@ if __name__ == "__main__":
     import pandas as pd
     from sklearn.model_selection import train_test_split
     
-    from src.preprocess.preprocess import CreditPreprocessor
+    from src.data_processing.preprocess import CreditPreprocessor
 
     PROJECT_ROOT = Path(__file__).resolve().parents[3]
     if str(PROJECT_ROOT) not in sys.path:
