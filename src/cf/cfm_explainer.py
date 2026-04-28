@@ -64,7 +64,8 @@ if __name__ == "__main__":
     print("=" * 70)
 
     print("\n[STEP 1] Loading German Credit data...")
-    df = load_data('german_credit')
+    dataset_name = 'german_credit'
+    df = load_data(dataset_name)
     print(f"✅ Loaded {len(df)} records, {len(df.columns)} features")
 
     print("\n[STEP 2] Splitting data (80/20 train/test)...")
