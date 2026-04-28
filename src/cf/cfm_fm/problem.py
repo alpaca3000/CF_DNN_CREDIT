@@ -164,8 +164,8 @@ class CFMProblem(ElementwiseProblem):
 # # ==========================================
 # if __name__ == "__main__":
 #     from sklearn.ensemble import RandomForestClassifier
-#     from src.preprocess.preprocess import CreditPreprocessor
-#     from src.preprocess.utils import load_data, split_data
+#     from src.data_processing.preprocess import CreditPreprocessor
+#     from src.data_processing.utils import load_data, split_data
 #     from src.cf.cfm_fm.lof import PlausibilityLOF
 #     from src.cf.cfm_fm.acme_weight import AcMEEngine
     
