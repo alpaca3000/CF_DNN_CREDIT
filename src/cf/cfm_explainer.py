@@ -68,14 +68,19 @@ if __name__ == "__main__":
     print(f"✅ Loaded {len(df)} records, {len(df.columns)} features")
 
     print("\n[STEP 2] Splitting data (80/20 train/test)...")
-    split_result = split_data(df, 'german_credit', 'Class', random_state=42)
-    df_train, df_test = split_result[0], split_result[1]
-    print(f"✅ Train: {len(df_train)}, Test: {len(df_test)}")
-
-    X_train = df_train.drop('Class', axis=1)
-    y_train = df_train['Class']
-    X_test = df_test.drop('Class', axis=1)
-    y_test = df_test['Class']
+    # utils.py trả về: X_train, X_valid, X_test, y_train, y_valid, y_test
+    X_train, X_valid, X_test, y_train, y_valid, y_test = split_data(
+        df, 
+        target_col='Class', 
+        dataset_name=dataset_name, 
+        test_size=0.2, 
+        val_size=0.2,
+        random_state=42
+    )
+    
+    # Hợp nhất lại X và y train để làm df_train_raw cho Generator 
+    df_train_raw = pd.concat([X_train, y_train], axis=1)
+    print(f"✅ Train features: {X_train.shape}, Test features: {X_test.shape}")
 
     print("\n[STEP 3] Preprocessing with CreditPreprocessor...")
     preprocessor = CreditPreprocessor(dataset_name='german_credit', model_type='embedding')
