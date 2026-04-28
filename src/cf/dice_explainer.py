@@ -221,13 +221,13 @@ if __name__ == "__main__":
     print(f"✅ Loaded {len(df)} records, {len(df.columns)} features")
 
     print("\n[STEP 2] Splitting data (80/20 train/test)...")
-    split_result = split_data(df, 'german_credit', 'Class', random_state=42)
-    df_train, df_test = split_result[0], split_result[1]
+    X_train, X_valid, X_test, y_train, y_valid, y_test = split_data(
+        df, target_col=target_col, dataset_name=dataset_name, random_state=42
+    )
 
-    X_train = df_train.drop('Class', axis=1)
-    y_train = df_train['Class']
-    X_test = df_test.drop('Class', axis=1)
-    y_test = df_test['Class']
+    # Ghép lại thành df_train/test chứa target cho DiCE
+    df_train = pd.concat([X_train, y_train], axis=1)
+    df_test = pd.concat([X_test, y_test], axis=1)
 
     print("\n[STEP 3] Preprocessing with CreditPreprocessor...")
     preprocessor = CreditPreprocessor(dataset_name='german_credit', model_type='embedding')
