@@ -126,7 +126,7 @@ if __name__ == "__main__":
     PROJECT_ROOT = Path(__file__).resolve().parents[3]
     if str(PROJECT_ROOT) not in sys.path:
         sys.path.insert(0, str(PROJECT_ROOT))
-    data_path = PROJECT_ROOT / "data" / "lending_club_balanced_sample_10k.csv"
+    data_path = PROJECT_ROOT / "data" / "lendingclub.csv"
 
     print("=" * 70)
     print("[LOF TEST] German Credit - PlausibilityLOF sanity script")
