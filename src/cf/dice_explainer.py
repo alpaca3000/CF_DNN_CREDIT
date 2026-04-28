@@ -192,31 +192,50 @@ if __name__ == "__main__":
     print("Testing CFM-FM Counterfactual Generation")
     print("=" * 70)
 
+    # [STEP 1] Load data
     print("\n[STEP 1] Loading German Credit data...")
     dataset_name = 'german_credit'
     df = load_data(dataset_name)
     target_col = 'Class'
     print(f"✅ Loaded {len(df)} records, {len(df.columns)} features")
 
+    # [STEP 2] Splitting data - Cập nhật để nhận đủ 6 biến từ utils.py
     print("\n[STEP 2] Splitting data (80/20 train/test)...")
     X_train, X_valid, X_test, y_train, y_valid, y_test = split_data(
-        df, target_col=target_col, dataset_name=dataset_name, random_state=42
+        df, 
+        target_col=target_col, 
+        dataset_name=dataset_name, 
+        random_state=42
     )
-
-    # Ghép lại thành df_train/test chứa target cho DiCE
+    
+    # Ghép lại thành df_train/test chứa target vì thư viện DiCE yêu cầu cột nhãn trong dataframe
     df_train = pd.concat([X_train, y_train], axis=1)
     df_test = pd.concat([X_test, y_test], axis=1)
+    print(f"✅ Train features: {X_train.shape}, Test features: {X_test.shape}")
 
+    # [STEP 3] Preprocessing
     print("\n[STEP 3] Preprocessing with CreditPreprocessor...")
     preprocessor = CreditPreprocessor(dataset_name=dataset_name, model_type='embedding')
-    preprocessor.fit(X_train=X_train)
+    preprocessor.fit(X_train=X_train) 
+    
+    # FIX LỖI: Gán giá trị cho biến metadata
+    metadata = preprocessor.get_metadata() 
     print(f"✅ Num features: {len(metadata['num_features'])}")
     print(f"✅ Cat features: {len(metadata['cat_features'])}")
 
+    # [STEP 4] Load trained model
     print("\n[STEP 4] Load trained EmbedMLP model...")
-    # load file models .pklfrom MODELS_DIR/german_credit/embed_mlp_best.pkl hoặc lấy best config trong results/german_credit/best_configs.json
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model, best_cfg = _load_embed_model(dataset_name, device)
     wrapper = EmbedMLPWrapper(model=model, preprocessor=preprocessor, device=device)
+    print(f"✅ Loaded EmbedMLP model.")
 
-    run_dice_benchmark(df_train, df_test, wrapper, preprocessor, target_col=target_col, num_cf=3)
+    # [STEP 5] Run Benchmark
+    run_dice_benchmark(
+        df_train=df_train, 
+        df_test=df_test, 
+        wrapper=wrapper, 
+        preprocessor=preprocessor, 
+        target_col=target_col, 
+        num_cf=3
+    )
