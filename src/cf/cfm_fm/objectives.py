@@ -38,28 +38,35 @@ def proximity(
     num_mask = ~cat_mask
     dist_sq = 0.0
 
-    # 1. Biến liên tục: Chuẩn hóa khoảng cách bằng ranges, tính bình phương (L2 proxy) nhân trọng số
+    # 1. Biến liên tục
     if np.any(num_mask):
         x_num = x[num_mask].astype(float)
         x_star_num = x_star[num_mask].astype(float)
-        w_num = np.abs(weights[num_mask].astype(float))
-        ranges = num_ranges.astype(float) + eps
         
-        # Chuẩn hóa khoảng cách về [0, 1] trước khi bình phương
+        # CẢI TIẾN: Sử dụng nghịch đảo của trọng số AcME (giống Eq. 4 trong paper)
+        # Đặc trưng quan trọng (weight cao) -> w_inv nhỏ -> Khoảng cách bị phạt ít hơn
+        w_num = 1.0 / (np.abs(weights[num_mask].astype(float)) + eps)
+        
+        ranges = num_ranges.astype(float) + eps
         delta_norm = np.abs(x_num - x_star_num) / ranges
         dist_sq += np.sum((delta_norm ** 2) * w_num)
 
-    # 2. Biến phân loại: Hamming distance nhân trọng số
+    # 2. Biến phân loại
     if np.any(cat_mask):
         x_cat = x[cat_mask]
         x_star_cat = x_star[cat_mask]
-        w_cat = np.abs(weights[cat_mask].astype(float))
+        
+        # Tương tự cho biến phân loại
+        w_cat = 1.0 / (np.abs(weights[cat_mask].astype(float)) + eps)
         
         diff = (x_cat != x_star_cat).astype(float)
         dist_sq += np.sum(diff * w_cat)
 
-    # Chuẩn hóa tổng thể về [0, 1] bằng cách chia cho tổng trọng số
-    total_weight = np.sum(np.abs(weights)) + eps
+    # Chuẩn hóa tổng thể (total_weight bây giờ là tổng của các trọng số nghịch đảo)
+    total_w_num = np.sum(1.0 / (np.abs(weights[num_mask]) + eps)) if np.any(num_mask) else 0
+    total_w_cat = np.sum(1.0 / (np.abs(weights[cat_mask]) + eps)) if np.any(cat_mask) else 0
+    total_weight = total_w_num + total_w_cat + eps
+    
     normalized_dist = np.sqrt(dist_sq) / np.sqrt(total_weight)
     
     return float(np.clip(normalized_dist, 0.0, 1.0))
