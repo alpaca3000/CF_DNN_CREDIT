@@ -83,8 +83,8 @@ if __name__ == "__main__":
     print(f"✅ Train features: {X_train.shape}, Test features: {X_test.shape}")
 
     print("\n[STEP 3] Preprocessing with CreditPreprocessor...")
-    preprocessor = CreditPreprocessor(dataset_name='german_credit', model_type='embedding')
-    preprocessor.fit(X_train=X_train)
+    preprocessor = CreditPreprocessor(dataset_name=dataset_name, model_type='embedding')
+    preprocessor.fit(X_train=X_train) # Fit trên X_train đã tách nhãn 
     metadata = preprocessor.get_metadata()
     print(f"✅ Num features: {len(metadata['num_features'])}")
     print(f"✅ Cat features: {len(metadata['cat_features'])}")
@@ -92,14 +92,15 @@ if __name__ == "__main__":
     print("\n[STEP 4] Load trained EmbedMLP model...")
     # load file models .pklfrom MODELS_DIR/german_credit/embed_mlp_best.pkl hoặc lấy best config trong results/german_credit/best_configs.json
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model, best_cfg = _load_embed_model('german_credit', device)
+    model, best_cfg = _load_embed_model(dataset_name, device)
     wrapper = EmbedMLPWrapper(model=model, preprocessor=preprocessor, device=device)
+
     print(f"✅ Loaded EmbedMLP with config: {best_cfg}")
 
     print("\n[STEP 5] Initialize CFM-FM Generator...")
     generator = CFMFWGenerator(
         model_wrapper=wrapper,
-        df_train_raw=df_train,
+        df_train_raw=df_train_raw, # Truyền df chứa cả features và nhãn 
         target_col='Class'
     )
     print("✅ CFM-FM Generator initialized.")
@@ -110,21 +111,20 @@ if __name__ == "__main__":
     evaluator = CFMEvaluator(
         preprocessor=preprocessor,
         plausibility_module=generator.plausibility_module,
-        df_train_raw=df_train
+        df_train_raw=df_train_raw # Dùng để tính ranges [cite: 4016]
     )
 
-    # 1. Lọc ra danh sách khách hàng thực sự bị TỪ CHỐI bởi mô hình trong tập TEST
-    N_TESTS = 10  # Số lượng mẫu bạn muốn test (có thể tăng lên 50, 100)
+    # Tìm khách hàng thực sự bị TỪ CHỐI (Class 0)
+    N_TESTS = 10 
     valid_rejected_instances = []
     
-    # Chỉ lấy những người có Class = 0 thực tế
-    potential_rejects = df_test[df_test["Class"] == 0].drop(columns=["Class"])
-    
-    for _, row in potential_rejects.iterrows():
-        # Double check: Mô hình phải thực sự từ chối người này (< 0.5)
-        prob = wrapper.predict_proba(row.to_frame().T)[0]
-        if prob < 0.5:
-            valid_rejected_instances.append((row, prob))
+    # Duyệt qua tập X_test và y_test đã tách nhãn
+    for idx, row in X_test.iterrows():
+        actual_label = y_test.iloc[idx]
+        if actual_label == 0: # Chỉ xét những người thực tế bị từ chối
+            prob = wrapper.predict_proba(row.to_frame().T)[0]
+            if prob < 0.5:
+                valid_rejected_instances.append((row, prob))
         
         if len(valid_rejected_instances) == N_TESTS:
             break

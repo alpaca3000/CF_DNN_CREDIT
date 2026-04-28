@@ -40,7 +40,6 @@ def run_dice_benchmark(df_train: pd.DataFrame, df_test: pd.DataFrame, wrapper, p
     actionable_features = metadata["actionable"]
 
     # 1. KHỞI TẠO DiCE DATA
-    # DiCE yêu cầu Dataframe phải chứa cả cột Target
     print("[1] Khởi tạo DiCE Data...")
     d = Data(
         dataframe=df_train,
@@ -48,54 +47,40 @@ def run_dice_benchmark(df_train: pd.DataFrame, df_test: pd.DataFrame, wrapper, p
         outcome_name=target_col
     )
 
-    # 2. KHỞI TẠO DiCE MODEL
-    # Sử dụng backend "sklearn" vì wrapper của chúng ta đã có sẵn hàm predict_proba
+    # 2. KHỞI TẠO DiCE MODEL (Adapter)
     print("[2] Khởi tạo DiCE Model (Bọc Black-box Wrapper)...")
-    
-    # Tạo một class Adapter nhỏ để DiCE hiểu wrapper của bạn
     class DiCEAdapter:
         def __init__(self, wrapper_instance, feature_names):
             self.wrapper = wrapper_instance
             self.feature_names = feature_names
             
         def predict_proba(self, X):
-            # 1. Đảm bảo đầu vào là DataFrame
             if not isinstance(X, pd.DataFrame):
                 X = pd.DataFrame(X, columns=self.feature_names)
-                
-            # 2. Lấy dự đoán từ mô hình của bạn
             probs = self.wrapper.predict_proba(X)
             probs = np.asarray(probs)
-            
-            # 3. ÉP KIỂU VỀ 2D ARRAY CHO DiCE
             if probs.ndim == 1:
-                # Nếu là mảng 1D (chỉ có xác suất nhãn 1)
                 probs_2d = np.zeros((len(probs), 2))
-                probs_2d[:, 1] = probs          # Cột 1: Xác suất duyệt (Class 1)
-                probs_2d[:, 0] = 1.0 - probs    # Cột 0: Xác suất từ chối (Class 0)
+                probs_2d[:, 1] = probs
+                probs_2d[:, 0] = 1.0 - probs
                 return probs_2d
-            
             return probs
             
         def predict(self, X):
             probs = self.predict_proba(X)
-            # Bây giờ probs chắc chắn là 2D, việc gọi [:, 1] là hoàn toàn an toàn
             return (probs[:, 1] >= 0.5).astype(int)
 
     m = Model(model=DiCEAdapter(wrapper, d.feature_names), backend="sklearn")
 
     # 3. KHỞI TẠO DiCE EXPLAINER
-    # Dùng thuật toán Genetic (Tiến hóa) để công bằng khi so sánh với NSGA-II của CFM-FW
     print("[3] Khởi tạo DiCE Explainer (Genetic Algorithm)...")
     exp = Dice(d, m, method="genetic")
 
     # 4. KHỞI TẠO CFM EVALUATOR (Dùng chung thước đo)
     print("[4] Khởi tạo CFM Evaluator...")
-    # Bắt buộc phải drop target để đưa X_train_raw vào huấn luyện LOF
     X_train_raw = df_train.drop(columns=[target_col])
-    
-    # Khởi tạo nhanh LOF để chấm điểm Plausibility cho DiCE
     X_train_scaled = preprocessor.transform(X_train_raw)
+    
     plausibility_module = PlausibilityLOF(n_neighbors=20)
     plausibility_module.fit(X_train_scaled)
 
@@ -105,56 +90,47 @@ def run_dice_benchmark(df_train: pd.DataFrame, df_test: pd.DataFrame, wrapper, p
         df_train_raw=X_train_raw
     )
 
-    # 5. TÌM KHÁCH HÀNG BỊ TỪ CHỐI & SINH CF
+    # 5. SINH CF & ĐÁNH GIÁ
     print("\n[5] Bắt đầu sinh CF bằng DiCE và Đánh giá...")
-    potential_rejects = df_test[df_test[target_col] == 0].drop(columns=[target_col])
+    potential_rejects = df_test[df_test[target_col] == 0]
     
     all_metrics = []
     success_count = 0
-    N_TESTS = 10 # Số lượng hồ sơ muốn test
+    N_TESTS = 10 
 
     for i, (idx, row) in enumerate(potential_rejects.iterrows()):
         if len(all_metrics) >= N_TESTS:
             break
             
-        x_req = row.to_frame().T
-        prob = wrapper.predict_proba(x_req)[0, 1] if wrapper.predict_proba(x_req).ndim == 2 else wrapper.predict_proba(x_req)[0]
+        # Tách features ra khỏi target
+        x_req_with_target = row.to_frame().T
+        x_req = x_req_with_target.drop(columns=[target_col])
         
-        if prob >= 0.5:
-            continue # Chỉ test người thực sự bị từ chối
+        prob = wrapper.predict_proba(x_req)[0]
+        if prob >= 0.5: continue
             
-        print(f"\n--- Hồ sơ #{len(all_metrics)+1} (Prob: {prob:.4f}) ---")
+        print(f"--- Hồ sơ #{len(all_metrics)+1} (Prob: {prob:.4f}) ---")
         
         try:
-            # Sinh CF: Áp dụng features_to_vary để Khóa các biến Immutable
             dice_exp = exp.generate_counterfactuals(
                 x_req, 
                 total_CFs=num_cf, 
                 desired_class="opposite",
-                features_to_vary=actionable_features # <--- ÉP RÀNG BUỘC TẠI ĐÂY
+                features_to_vary=actionable_features
             )
             
-            # Trích xuất DataFrame kết quả từ DiCE
             dice_raw_df = dice_exp.cf_examples_list[0].final_cfs_df
-            
             if dice_raw_df is not None and not dice_raw_df.empty:
-                print(f" [*] DiCE tìm thấy {len(dice_raw_df)} CFs.")
                 success_count += 1
-                
-                # Bỏ cột target do DiCE tự động thêm vào để tương thích với Evaluator
                 cf_df_clean = dice_raw_df.drop(columns=[target_col])
-                
-                # Có thể thêm predicted_prob vào để Evaluator chấm Validity chính xác
-                cf_df_clean['predicted_prob'] = wrapper.predict_proba(cf_df_clean)[:, 1] if wrapper.predict_proba(cf_df_clean).ndim == 2 else wrapper.predict_proba(cf_df_clean)
+                cf_df_clean['predicted_prob'] = wrapper.predict_proba(cf_df_clean)
 
-                # Chấm điểm bằng Evaluator của bạn!
-                metrics = evaluator.evaluate(x_original=row, cf_df=cf_df_clean)
+                metrics = evaluator.evaluate(x_original=row.drop(target_col), cf_df=cf_df_clean)
                 all_metrics.append(metrics)
             else:
-                print(" [!] DiCE thất bại: Không tìm thấy CF.")
-                
+                print(" [!] DiCE không tìm thấy CF.")
         except Exception as e:
-            print(f" [!] Lỗi khi chạy DiCE: {e}")
+            print(f" [!] Lỗi: {e}")
 
     # 6. IN KẾT QUẢ BENCHMARK TỔNG QUÁT
     print("\n" + "="*50)
@@ -217,7 +193,9 @@ if __name__ == "__main__":
     print("=" * 70)
 
     print("\n[STEP 1] Loading German Credit data...")
-    df = load_data('german_credit')
+    dataset_name = 'german_credit'
+    df = load_data(dataset_name)
+    target_col = 'Class'
     print(f"✅ Loaded {len(df)} records, {len(df.columns)} features")
 
     print("\n[STEP 2] Splitting data (80/20 train/test)...")
@@ -230,16 +208,15 @@ if __name__ == "__main__":
     df_test = pd.concat([X_test, y_test], axis=1)
 
     print("\n[STEP 3] Preprocessing with CreditPreprocessor...")
-    preprocessor = CreditPreprocessor(dataset_name='german_credit', model_type='embedding')
+    preprocessor = CreditPreprocessor(dataset_name=dataset_name, model_type='embedding')
     preprocessor.fit(X_train=X_train)
-    metadata = preprocessor.get_metadata()
     print(f"✅ Num features: {len(metadata['num_features'])}")
     print(f"✅ Cat features: {len(metadata['cat_features'])}")
 
     print("\n[STEP 4] Load trained EmbedMLP model...")
     # load file models .pklfrom MODELS_DIR/german_credit/embed_mlp_best.pkl hoặc lấy best config trong results/german_credit/best_configs.json
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model, best_cfg = _load_embed_model('german_credit', device)
+    model, best_cfg = _load_embed_model(dataset_name, device)
     wrapper = EmbedMLPWrapper(model=model, preprocessor=preprocessor, device=device)
 
-    run_dice_benchmark(df_train, df_test, wrapper, preprocessor, target_col='Class', num_cf=3)
+    run_dice_benchmark(df_train, df_test, wrapper, preprocessor, target_col=target_col, num_cf=3)
