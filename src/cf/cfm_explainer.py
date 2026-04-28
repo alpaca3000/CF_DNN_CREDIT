@@ -8,7 +8,7 @@ import json
 
 from src.models.embed_mlp import EmbedMLP
 from src.models.model_wrapper import EmbedMLPWrapper
-from src.preprocess.preprocess import CreditPreprocessor
+from src.data_processing.preprocess import CreditPreprocessor
 from src.cf.metric_evaluator import CFMEvaluator
 from src.cf.cfm_fm.generator import CFMFWGenerator
 from src.data_processing.utils import load_data, split_data
