@@ -5,6 +5,7 @@ import sys
 import torch
 from typing import Any
 import json
+import pandas as pd
 
 from src.models.embed_mlp import EmbedMLP
 from src.models.model_wrapper import EmbedMLPWrapper
@@ -79,7 +80,7 @@ if __name__ == "__main__":
         random_state=42
     )
     
-    # Hợp nhất lại X và y train để làm df_train_raw cho Generator 
+    # Tái cấu trúc df_train_raw chứa cả features và target phục vụ KDTree
     df_train_raw = pd.concat([X_train, y_train], axis=1)
     print(f"✅ Train features: {X_train.shape}, Test features: {X_test.shape}")
 
