@@ -3,8 +3,11 @@
 import pandas as pd
 import zipfile
 import os
+import ssl  # Thêm thư viện để xử lý chứng chỉ bảo mật
 from pathlib import Path
 
+# Cấu hình bypass lỗi SSL khi tải dữ liệu từ internet
+ssl._create_default_https_context = ssl._create_unverified_context
 
 DATA_DIR = Path(__file__).resolve().parent
 
@@ -14,9 +17,12 @@ columns = [
     'Status', 'Duration', 'History', 'Purpose', 'Amount', 'Savings',
     'Employment', 'InstallmentRate', 'PersonalStatus', 'OtherDebtors',
     'ResidenceSince', 'Property', 'Age', 'OtherPlans', 'Housing',
-    'ExistingCredits', 'Job', 'Liable', 'Telephone', 'ForeignWorker', 'Class'
+    'ExistingCredits', 'Job', 'Liable', 'Telephone', 'ForeignWorker', 'Class'  # Giữ nguyên tên cột là Class theo ý bạn
 ]
+
 gcredit = pd.read_csv(url, sep=' ', header=None, names=columns)
+
+# Giữ nguyên ánh xạ nhãn: 1 -> 1 (Đồng ý), 2 -> 0 (Từ chối)
 gcredit['Class'] = gcredit['Class'].map({1: 1, 2: 0})
 
 # áp mapping để dữ liệu dễ đọc khi EDA
@@ -90,7 +96,6 @@ lending_file_path = DATA_DIR / "lendingclub.csv"
 
 if lending_file_path.exists():
     lending_club = pd.read_csv(lending_file_path)
-    # Vì file của bạn đã có sẵn cột 'target' (0 và 1), 
     print(f"Đã load xong {len(lending_club)} dòng dữ liệu Lending Club.")
 else:
     print("Cảnh báo: Không tìm thấy file lendingclub.csv trong thư mục data")
@@ -104,9 +109,8 @@ if gmsc_file_path.exists():
 else:
     print("Cảnh báo: Chưa tìm thấy file gmsc.csv sạch trong thư mục data.")
     
-# 3. LƯU VÀO THƯ MỤC DATA
+# 4. LƯU VÀO THƯ MỤC DATA
 gcredit.to_csv(DATA_DIR / "german_credit.csv", index=False)
 
 if 'lending_club' in locals():
-    # Lưu ra một file tên ngắn gọn là 'lending.csv' để dễ gọi trong lệnh train
     lending_club.to_csv(DATA_DIR / "lending.csv", index=False)
