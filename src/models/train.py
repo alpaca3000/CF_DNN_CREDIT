@@ -291,7 +291,7 @@ def main(
     target_col = get_target_col(dataset)
     X_train, X_valid, X_test, y_train, y_valid, y_test = split_data(
         df=df, 
-        output_col=target_col
+        target_col=target_col
     )
     model_type_map = {
         "embed_mlp": "embedding",
