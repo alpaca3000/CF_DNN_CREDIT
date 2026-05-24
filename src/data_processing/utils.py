@@ -89,11 +89,12 @@ def split_data(
         y_test.reset_index(drop=True),  
     )
 
+
 def get_target_col(dataset_name: str) -> str:
     """Trả về tên cột nhãn dựa theo tập dữ liệu."""
     target_map = {
-        "german_credit": "Class",
-        "gmsc": "SeriousDlqin2yrs",
+        "german_credit": "Class",  
+        "gmsc": "target",          
         "lending_club": "target",
     }
     if dataset_name not in target_map:
