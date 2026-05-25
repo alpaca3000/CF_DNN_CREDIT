@@ -114,7 +114,7 @@ class CreditPreprocessor:
                     "NumberOfTimes90DaysLate", "NumberRealEstateLoansOrLines", 
                     "NumberOfTime60-89DaysPastDueNotWorse"
                 ],
-                "target": "SeriousDlqin2yrs"
+                "target": "target" # Đã sửa đồng bộ cột nhãn từ 'SeriousDlqin2yrs' sang 'target'
             },
         }
 
@@ -124,19 +124,16 @@ class CreditPreprocessor:
         return X.copy()
     
     def _infer_feature_types(self, X: pd.DataFrame) -> tuple[List[str], List[str]]:
-        # 1. Kiểm tra cấu hình có sẵn cho dataset này không
+        """Xác định danh sách cột số và phân loại, ưu tiên cấu hình hệ thống."""
         cfg = self.configs.get(self.dataset_name, {})
         cfg_cat = cfg.get("categorical", [])
         cfg_num = cfg.get("numerical", [])
 
         if cfg_cat or cfg_num:
-            # Nếu có cấu hình, ưu tiên lấy các cột đó (nếu chúng tồn tại trong X)
             cat_cols = [c for c in cfg_cat if c in X.columns]
-            # Các cột numerical là những cột còn lại
             num_cols = [c for c in X.columns if c not in cat_cols]
             return num_cols, cat_cols
         
-        # 2. Nếu không có cấu hình, tự động suy luận theo kiểu dữ liệu
         num_cols = X.select_dtypes(include=[np.number, "bool"]).columns.tolist()
         cat_cols = [c for c in X.columns if c not in num_cols]
         return num_cols, cat_cols
@@ -165,7 +162,6 @@ class CreditPreprocessor:
         return X[ordered_cols]
 
     def fit(self, X_train: pd.DataFrame) -> "CreditPreprocessor":
-
         X = self._validate_input(X_train)
         self.num_features_, self.cat_features_ = self._infer_feature_types(X)
         X = self._clean_features(X, is_fit=True)
@@ -174,7 +170,6 @@ class CreditPreprocessor:
             min_val = float(X[col].min())
             max_val = float(X[col].max())
             range_val = max_val - min_val
-            # Đảm bảo không bị chia cho 0 nếu biến là hằng số
             self.num_ranges_[col] = range_val if range_val > 0 else 1e-9
 
         if self.model_type in {"classic_mlp", "embedding", "tree"} and self.num_features_:
@@ -266,7 +261,6 @@ class CreditPreprocessor:
     def inverse_transform(self, X_transformed: np.ndarray) -> pd.DataFrame:
         """
         Đưa dữ liệu từ không gian model (scaled/encoded) về dạng raw DataFrame.
-
         Hỗ trợ:
         - embedding/tree: [num_scaled, cat_ordinal]
         - classic_mlp: [num_scaled, cat_onehot]
@@ -296,15 +290,12 @@ class CreditPreprocessor:
             cat_part = X_arr[:, n_num:]
 
             if self.model_type == "classic_mlp" and self.onehot_encoder is not None:
-                # onehot -> category string
                 cat_raw = self.onehot_encoder.inverse_transform(cat_part)
             else:
-                # ordinal -> category string
                 if self.ordinal_encoder is None:
                     raise RuntimeError("ordinal_encoder chưa được khởi tạo để inverse_transform.")
 
                 cat_ord = np.rint(cat_part).astype(np.int64)
-                # clip vào miền hợp lệ cho từng cột
                 for j, cats in enumerate(self.ordinal_encoder.categories_):
                     max_idx = len(cats) - 1
                     cat_ord[:, j] = np.clip(cat_ord[:, j], 0, max_idx)
@@ -318,7 +309,6 @@ class CreditPreprocessor:
             columns=self.num_features_ + self.cat_features_
         )
 
-        # Ép lại kiểu số cho cột numeric
         for col in self.num_features_:
             out[col] = pd.to_numeric(out[col], errors="coerce")
 
