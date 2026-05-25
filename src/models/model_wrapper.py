@@ -48,8 +48,14 @@ class EmbedMLPWrapper:
         # Đầu ra sau preprocessor phải giữ nguyên số cột (dùng OrdinalEncoder)
         # chuẩn hóa số liệu và mã hóa categorical bằng ordinal encoder (không one-hot)
         X_num = self.preprocessor.scaler.transform(X_df[self.preprocessor.num_features_])
+        
         if self.preprocessor.cat_features_:
-            X_cat = self.preprocessor.ordinal_encoder.transform(X_df[self.preprocessor.cat_features_])
+            # --- ĐOẠN SỬA ĐỔI: Ép kiểu string tuyệt đối chống lỗi so sánh hỗn hợp float/str ---
+            cat_df = X_df[self.preprocessor.cat_features_].copy()
+            for col in self.preprocessor.cat_features_:
+                cat_df[col] = cat_df[col].fillna("MISSING").map(str).replace({"nan": "MISSING", "NaN": "MISSING"})
+            
+            X_cat = self.preprocessor.ordinal_encoder.transform(cat_df)
             encoded_data = np.hstack([X_num, X_cat])
         else:
             encoded_data = X_num
