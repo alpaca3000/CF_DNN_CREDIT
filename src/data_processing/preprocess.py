@@ -156,7 +156,9 @@ class CreditPreprocessor:
         for col in self.cat_features_:
             if col not in X.columns:
                 X[col] = "MISSING"
-            X[col] = X[col].astype(str).fillna("MISSING")
+            else:
+                X[col] = X[col].fillna("MISSING").astype(str)
+                X[col] = X[col].replace({"nan": "MISSING", "NaN": "MISSING"})
 
         ordered_cols = self.num_features_ + self.cat_features_
         return X[ordered_cols]
@@ -181,7 +183,7 @@ class CreditPreprocessor:
                 handle_unknown="use_encoded_value",
                 unknown_value=-1,
             )
-            self.ordinal_encoder.fit(X[self.cat_features_].astype(str))
+            self.ordinal_encoder.fit(X[self.cat_features_].map(str))
 
         if self.model_type == "classic_mlp" and self.cat_features_:
             try:
@@ -217,7 +219,10 @@ class CreditPreprocessor:
             num_arr = self.scaler.transform(X_df[self.num_features_]).astype(np.float32)
 
         if self.cat_features_:
-            cat_df = X_df[self.cat_features_].astype(str)
+            cat_df = X_df[self.cat_features_].copy()
+            for col in self.cat_features_:
+                cat_df[col] = cat_df[col].fillna("MISSING").map(str).replace({"nan": "MISSING", "NaN": "MISSING"})
+
             if self.model_type == "classic_mlp" and self.onehot_encoder is not None:
                 cat_onehot = self.onehot_encoder.transform(cat_df).astype(np.float32)
                 return np.hstack([num_arr, cat_onehot]).astype(np.float32)
