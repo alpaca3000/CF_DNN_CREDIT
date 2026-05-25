@@ -1,5 +1,9 @@
-# usage: python -m src.cf.cfm_explainer
+# usage: 
+#   python -m src.cf.cfm_explainer --dataset german_credit --n-tests 10
+#   python -m src.cf.cfm_explainer --dataset lending_club --n-tests 10
+#   python -m src.cf.cfm_explainer --dataset gmsc --n-tests 10
 
+import argparse
 from pathlib import Path
 import sys
 import torch
@@ -7,16 +11,17 @@ from typing import Any
 import json
 import pandas as pd
 
+# Đảm bảo PROJECT_ROOT nằm trong sys.path để tránh lỗi ModuleNotFoundError
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
 from src.models.embed_mlp import EmbedMLP
 from src.models.model_wrapper import EmbedMLPWrapper
 from src.data_processing.preprocess import CreditPreprocessor
 from src.cf.metric_evaluator import CFMEvaluator
 from src.cf.cfm_fm.generator import CFMFWGenerator
-from src.data_processing.utils import load_data, split_data
-
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
+from src.data_processing.utils import load_data, split_data, get_target_col
 
 OUTPUTS_DIR = PROJECT_ROOT / "src" / "outputs"
 MODELS_DIR = OUTPUTS_DIR / "models"
@@ -36,7 +41,7 @@ def _load_embed_model(dataset: str, device: torch.device) -> tuple[EmbedMLP, dic
 
     best_cfg = cfg_json.get("embed_mlp", {}).get("best_config", {})
     if not best_cfg:
-        raise ValueError("best_configs.json không có cấu hình cho embed_mlp.")
+        raise ValueError(f"best_configs.json không có cấu hình cho embed_mlp của bộ {dataset}.")
 
     model = EmbedMLP(
         input_num_dim=int(best_cfg["input_num_dim"]),
@@ -50,6 +55,7 @@ def _load_embed_model(dataset: str, device: torch.device) -> tuple[EmbedMLP, dic
         state = torch.load(model_path, map_location=device, weights_only=True)
     except TypeError:
         state = torch.load(model_path, map_location=device)
+        
     if isinstance(state, dict):
         model.load_state_dict(state)
     else:
@@ -59,88 +65,97 @@ def _load_embed_model(dataset: str, device: torch.device) -> tuple[EmbedMLP, dic
     model.eval()
     return model, best_cfg
 
-if __name__ == "__main__":
+def main():
+    parser = argparse.ArgumentParser(description="Batch Evaluation for CFM-FW Explainer.")
+    parser.add_argument(
+        "--dataset", 
+        type=str, 
+        default="german_credit", 
+        choices=["german_credit", "lending_club", "gmsc"], 
+        help="Dataset name to evaluate."
+    )
+    parser.add_argument(
+        "--n-tests", 
+        type=int, 
+        default=10, 
+        help="Number of rejected profiles to test."
+    )
+    args = parser.parse_args()
+
+    dataset_name = args.dataset
+    target_col = get_target_col(dataset_name)
+
     print("=" * 70)
-    print("Testing CFM-FM Counterfactual Generation")
+    print(f"Testing CFM-FM Counterfactual Generation on: {dataset_name.upper()}")
     print("=" * 70)
 
-    print("\n[STEP 1] Loading German Credit data...")
-    dataset_name = 'german_credit'
+    print(f"\n[STEP 1] Loading {dataset_name} data...")
     df = load_data(dataset_name)
     print(f"✅ Loaded {len(df)} records, {len(df.columns)} features")
 
-    print("\n[STEP 2] Splitting data (80/20 train/test)...")
-    # utils.py trả về: X_train, X_valid, X_test, y_train, y_valid, y_test
+    print("\n[STEP 2] Splitting data...")
     X_train, X_valid, X_test, y_train, y_valid, y_test = split_data(
-        df, 
-        target_col='Class', 
-        dataset_name=dataset_name, 
-        test_size=0.2, 
-        val_size=0.2,
-        random_state=42
+        df=df, 
+        target_col=target_col
     )
     
-    # Tái cấu trúc df_train_raw chứa cả features và target phục vụ KDTree
+    # Kết hợp lại để phục vụ KDTree khởi tạo quần thể phản thực
     df_train_raw = pd.concat([X_train, y_train], axis=1)
     print(f"✅ Train features: {X_train.shape}, Test features: {X_test.shape}")
 
     print("\n[STEP 3] Preprocessing with CreditPreprocessor...")
     preprocessor = CreditPreprocessor(dataset_name=dataset_name, model_type='embedding')
-    preprocessor.fit(X_train=X_train) # Fit trên X_train đã tách nhãn 
+    preprocessor.fit(X_train=X_train)
     metadata = preprocessor.get_metadata()
     print(f"✅ Num features: {len(metadata['num_features'])}")
     print(f"✅ Cat features: {len(metadata['cat_features'])}")
 
     print("\n[STEP 4] Load trained EmbedMLP model...")
-    # load file models .pklfrom MODELS_DIR/german_credit/embed_mlp_best.pkl hoặc lấy best config trong results/german_credit/best_configs.json
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model, best_cfg = _load_embed_model(dataset_name, device)
     wrapper = EmbedMLPWrapper(model=model, preprocessor=preprocessor, device=device)
-
     print(f"✅ Loaded EmbedMLP with config: {best_cfg}")
 
     print("\n[STEP 5] Initialize CFM-FM Generator...")
     generator = CFMFWGenerator(
         model_wrapper=wrapper,
-        df_train_raw=df_train_raw, # Truyền df chứa cả features và nhãn 
-        target_col='Class'
+        df_train_raw=df_train_raw,
+        target_col=target_col
     )
     print("✅ CFM-FM Generator initialized.")
 
-    print("\n[STEP 6] & [STEP 7] BATCH EVALUATION - Khởi tạo Đánh giá hàng loạt...")
-    
-    # Khởi tạo Evaluator 1 lần duy nhất ở ngoài vòng lặp
+    print("\n[STEP 6] & [STEP 7] BATCH EVALUATION...")
     evaluator = CFMEvaluator(
         preprocessor=preprocessor,
         plausibility_module=generator.plausibility_module,
-        df_train_raw=df_train_raw # Dùng để tính ranges [cite: 4016]
+        df_train_raw=df_train_raw
     )
 
-    # Tìm khách hàng thực sự bị TỪ CHỐI (Class 0)
-    N_TESTS = 10 
+    # Do tất cả các bộ dữ liệu đã đồng bộ: 0 là Từ chối (Rejected)
+    # Xác suất prob < 0.5 nghĩa là mô hình dự đoán Từ chối
+    rejected_label = 0
+
     valid_rejected_instances = []
-    
-    # Duyệt qua tập X_test và y_test đã tách nhãn
-    for idx, row in X_test.iterrows():
-        actual_label = y_test.iloc[idx]
-        if actual_label == 0: # Chỉ xét những người thực tế bị từ chối
+    # Sử dụng .iloc[count] để truy xuất chính xác theo dòng sau khi reset_index
+    for count, (idx, row) in enumerate(X_test.iterrows()):
+        actual_label = y_test.iloc[count]
+        if int(actual_label) == rejected_label: 
             prob = wrapper.predict_proba(row.to_frame().T)[0]
             if prob < 0.5:
                 valid_rejected_instances.append((row, prob))
         
-        if len(valid_rejected_instances) == N_TESTS:
+        if len(valid_rejected_instances) == args.n_tests:
             break
 
-    print(f"✅ Đã tìm thấy {len(valid_rejected_instances)} khách hàng bị từ chối hợp lệ để test.")
+    print(f"✅ Đã tìm thấy {len(valid_rejected_instances)} khách hàng bị TỪ CHỐI thực tế để test.")
 
-    # 2. Chạy vòng lặp sinh CF và Đánh giá
     all_metrics = []
     success_count = 0
 
     for i, (x_req, original_prob) in enumerate(valid_rejected_instances):
         print(f"\n--- Đang xử lý Hồ sơ #{i+1}/{len(valid_rejected_instances)} (Prob gốc: {original_prob:.4f}) ---")
         
-        # Sinh kịch bản CF (Có thể giới hạn num_cf=3 để chạy nhanh hơn và sát thực tế)
+        # Sinh kịch bản Counterfactual (num_cf=3)
         cf_results = generator.generate(x_req, pop_size=100, n_gen=50, num_cf=3)
         
         if cf_results is None or cf_results.empty:
@@ -150,20 +165,17 @@ if __name__ == "__main__":
         print(f" [*] Thành công: Tìm thấy {len(cf_results)} CFs.")
         success_count += 1
         
-        # Đánh giá CF cho riêng khách hàng này
+        # Đánh giá các chỉ số chất lượng phản thực
         metrics = evaluator.evaluate(x_original=x_req, cf_df=cf_results)
         all_metrics.append(metrics)
 
-    # 3. Tổng hợp kết quả (Average Benchmark)
     print("\n" + "="*50)
-    print(" KẾT QUẢ BENCHMARK TỔNG QUÁT (AVERAGE METRICS) ")
+    print(f" KẾT QUẢ BENCHMARK TỔNG QUÁT ({dataset_name.upper()}) ")
     print("="*50)
-    
     print(f"Tổng số hồ sơ đã test: {len(valid_rejected_instances)}")
     print(f"Số hồ sơ lật nhãn thành công (Success Rate): {success_count}/{len(valid_rejected_instances)} ({(success_count/len(valid_rejected_instances))*100:.2f}%)")
 
     if all_metrics:
-        # Tính trung bình các value trong list dictionary
         avg_metrics = {}
         for key in all_metrics[0].keys():
             avg_metrics[key] = sum(m[key] for m in all_metrics) / len(all_metrics)
@@ -175,4 +187,6 @@ if __name__ == "__main__":
                 print(f" * {key}: {value:.4f}")
     else:
         print("Không có kết quả nào để đánh giá.")
-    
+
+if __name__ == "__main__":
+    main()
