@@ -10,6 +10,7 @@ import torch
 from typing import Any
 import json
 import pandas as pd
+import numpy as np
 
 # Đảm bảo PROJECT_ROOT nằm trong sys.path để tránh lỗi ModuleNotFoundError
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -163,6 +164,22 @@ def main():
             continue
             
         print(f" [*] Thành công: Tìm thấy {len(cf_results)} CFs.")
+        
+        # Lấy cụm dữ liệu thực tế của hồ sơ #1 để vẽ biểu đồ
+        if i == 0:
+            print("\n" + "="*60)
+            print(">>> Dữ liệu thực tế vẽ biểu đồ - Case study #1 <<<")
+            print("="*60)
+            
+            # Lấy mảng các giá trị liên tục (Continuous) của hồ sơ gốc
+            orig_vals = x_req[metadata['num_features']].values
+            print("x_original = np.array([", ", ".join([f"{v:.4f}" for v in orig_vals]), "])")
+            
+            # Lấy mảng các giá trị liên tục của phương án phản thực tế tốt nhất (dòng đầu tiên)
+            best_cf_vals = cf_results.iloc[0][metadata['num_features']].values
+            print("x_counterfactual = np.array([", ", ".join([f"{v:.4f}" for v in best_cf_vals]), "])")
+            print("="*60 + "\n")
+
         success_count += 1
         
         # Đánh giá các chỉ số chất lượng phản thực
