@@ -92,7 +92,7 @@ def main():
 
     print(f"\n[STEP 1] Loading {dataset_name} data...")
     df = load_data(dataset_name)
-    print(f"✅ Loaded {len(df)} records, {len(df.columns)} features")
+    print(f"Loaded {len(df)} records, {len(df.columns)} features")
 
     print("\n[STEP 2] Splitting data...")
     X_train, X_valid, X_test, y_train, y_valid, y_test = split_data(
@@ -102,20 +102,20 @@ def main():
     
     # Kết hợp lại để phục vụ KDTree khởi tạo quần thể phản thực
     df_train_raw = pd.concat([X_train, y_train], axis=1)
-    print(f"✅ Train features: {X_train.shape}, Test features: {X_test.shape}")
+    print(f"Train features: {X_train.shape}, Test features: {X_test.shape}")
 
     print("\n[STEP 3] Preprocessing with CreditPreprocessor...")
     preprocessor = CreditPreprocessor(dataset_name=dataset_name, model_type='embedding')
     preprocessor.fit(X_train=X_train)
     metadata = preprocessor.get_metadata()
-    print(f"✅ Num features: {len(metadata['num_features'])}")
-    print(f"✅ Cat features: {len(metadata['cat_features'])}")
+    print(f"Num features: {len(metadata['num_features'])}")
+    print(f"Cat features: {len(metadata['cat_features'])}")
 
     print("\n[STEP 4] Load trained EmbedMLP model...")
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model, best_cfg = _load_embed_model(dataset_name, device)
     wrapper = EmbedMLPWrapper(model=model, preprocessor=preprocessor, device=device)
-    print(f"✅ Loaded EmbedMLP with config: {best_cfg}")
+    print(f"Loaded EmbedMLP with config: {best_cfg}")
 
     print("\n[STEP 5] Initialize CFM-FM Generator...")
     generator = CFMFWGenerator(
@@ -123,7 +123,7 @@ def main():
         df_train_raw=df_train_raw,
         target_col=target_col
     )
-    print("✅ CFM-FM Generator initialized.")
+    print("CFM-FM Generator initialized.")
 
     print("\n[STEP 6] & [STEP 7] BATCH EVALUATION...")
     evaluator = CFMEvaluator(
@@ -148,7 +148,7 @@ def main():
         if len(valid_rejected_instances) == args.n_tests:
             break
 
-    print(f"✅ Đã tìm thấy {len(valid_rejected_instances)} khách hàng bị TỪ CHỐI thực tế để test.")
+    print(f"Đã tìm thấy {len(valid_rejected_instances)} khách hàng bị TỪ CHỐI thực tế để test.")
 
     all_metrics = []
     success_count = 0
@@ -171,7 +171,7 @@ def main():
             print(">>> Dữ liệu thực tế vẽ biểu đồ - Case study #1 <<<")
             print("="*60)
             
-            # Lấy mảng các giá trị liên tục (Continuous) của hồ sơ gốc
+            # Lấy mảng các giá trị liên tục của hồ sơ gốc
             orig_vals = x_req[metadata['num_features']].values
             print("x_original = np.array([", ", ".join([f"{v:.4f}" for v in orig_vals]), "])")
             
@@ -187,7 +187,7 @@ def main():
         all_metrics.append(metrics)
 
     print("\n" + "="*50)
-    print(f" KẾT QUẢ BENCHMARK TỔNG QUÁT ({dataset_name.upper()}) ")
+    print(f" Kết quả benchmark tổng quát ({dataset_name.upper()}) ")
     print("="*50)
     print(f"Tổng số hồ sơ đã test: {len(valid_rejected_instances)}")
     print(f"Số hồ sơ lật nhãn thành công (Success Rate): {success_count}/{len(valid_rejected_instances)} ({(success_count/len(valid_rejected_instances))*100:.2f}%)")
