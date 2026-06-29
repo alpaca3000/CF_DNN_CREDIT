@@ -74,7 +74,7 @@ class SingleCFProblem(ElementwiseProblem):
         out["F"] = [f1_yloss, f2_dist]
 
 
-# LUỒNG TẢI MÔ HÌNH HỆ THỐNG
+# Luồng tải mô hình hệ thống
 
 def _load_embed_model(dataset: str, device: torch.device) -> tuple[EmbedMLP, dict[str, Any]]:
     cfg_path = RESULTS_DIR / dataset / "best_configs.json"
@@ -119,7 +119,7 @@ def main():
     target_col = get_target_col(dataset_name)
 
     print("=" * 70)
-    print(f"RUNNING BASELINE: SINGLE-CF (WACHTER) ON: {dataset_name.upper()}")
+    print(f"Running baseline: single-cf (wachter) on: {dataset_name.upper()}")
     print("=" * 70)
 
     df = load_data(dataset_name)
@@ -133,21 +133,18 @@ def main():
     model, best_cfg = _load_embed_model(dataset_name, device)
     wrapper = EmbedMLPWrapper(model=model, preprocessor=preprocessor, device=device)
 
-    # -----------------------------------------------------------------
     # SỬA LỖI: Khởi tạo mô hình LOF cục bộ phục vụ cho việc đánh giá LOF-NR 
-    # -----------------------------------------------------------------
     print("\n[SỬA LỖI] Đang huấn luyện mô hình Local Outlier Factor (LOF) cho Evaluator...")
     X_train_scaled = preprocessor.transform(X_train)
     lof_model = LocalOutlierFactor(n_neighbors=20, novelty=True, metric='minkowski') 
     lof_model.fit(X_train_scaled)
-    print("✅ Đã huấn luyện xong mô hình LOF.")
+    print("Huấn luyện xong mô hình LOF.")
 
     evaluator = CFMEvaluator(
         preprocessor=preprocessor,
         plausibility_module=lof_model,  
         df_train_raw=df_train_raw
     )
-    # -----------------------------------------------------------------
 
     rejected_label = 0
     valid_rejected_instances = []
@@ -160,7 +157,7 @@ def main():
         if len(valid_rejected_instances) == args.n_tests:
             break
 
-    print(f"✅ Đã tìm thấy {len(valid_rejected_instances)} khách hàng bị TỪ CHỐI thực tế để test.")
+    print(f"Đã tìm thấy {len(valid_rejected_instances)} khách hàng bị TỪ CHỐI thực tế để test.")
 
     all_metrics = []
     success_count = 0
@@ -213,7 +210,7 @@ def main():
         all_metrics.append(metrics)
 
     print("\n" + "="*50)
-    print(f" KẾT QUẢ BENCHMARK TỔNG QUÁT (SINGLE-CF BASELINE) ")
+    print(f" Kết quả benchmark tổng quát (single-cf baseline) ")
     print("="*50)
     
     if all_metrics:
