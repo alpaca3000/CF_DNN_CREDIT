@@ -26,43 +26,19 @@ from src.data_processing.utils import get_target_col, load_data, split_data
 from src.models.embed_mlp import EmbedMLP
 from src.models.model_wrapper import EmbedMLPWrapper
 
-OUTPUTS_DIR = PROJECT_ROOT / "src" / "outputs"
+OUTPUTS_DIR = PROJECT_ROOT / "outputs"
 MODELS_DIR = OUTPUTS_DIR / "models"
 RESULTS_DIR = OUTPUTS_DIR / "results"
 
-
-def run_dice_benchmark(
-    df_train: pd.DataFrame,
-    df_test: pd.DataFrame,
-    wrapper,
-    preprocessor,
-    target_col="target",
-    num_cf=3,
-    n_tests=10,
-):
-    print("\n" + "=" * 60)
-    print(f" CHẠY BENCHMARK VỚI DiCE (BASELINE) - {target_col.upper()} ")
-    print("=" * 60)
-
-    metadata = preprocessor.get_metadata()
-    num_features = metadata["num_features"]
-    actionable_features = metadata["actionable"]
-
-    # 1. KHỞI TẠO DiCE DATA
-    print("[1] Khởi tạo DiCE Data...")
-    d = Data(dataframe=df_train, continuous_features=num_features, outcome_name=target_col)
-
-    # 2. KHỞI TẠO DiCE MODEL (Adapter)
-    print("[2] Khởi tạo DiCE Model (Bọc Black-box Wrapper)...")
-
-    # Lấy giá trị xuất hiện nhiều nhất (mode) của các cột để làm sạch dữ liệu đột biến của DiCE
-    cat_modes = {col: df_train[col].mode()[0] for col in metadata["cat_features"] if col in df_train.columns}
-
-    class DiCEAdapter:
-        def __init__(self, wrapper_instance, feature_names, cat_modes_dict):
+class DiCEAdapter:
+        def __init__(self, wrapper_instance, feature_names, cat_modes_dict, threshold=0.5):
+            """
+            Initialize the DiCEAdapter.
+            """
             self.wrapper = wrapper_instance
             self.feature_names = feature_names
             self.cat_modes = cat_modes_dict
+            self.threshold = threshold  # Ngưỡng để phân loại nhãn dự đoán
             
         def predict_proba(self, X):
             if not isinstance(X, pd.DataFrame):
@@ -90,7 +66,34 @@ def run_dice_benchmark(
             
         def predict(self, X):
             probs = self.predict_proba(X)
-            return (probs[:, 1] >= 0.5).astype(int)
+            return (probs[:, 1] >= self.threshold).astype(int)
+
+def run_dice_benchmark(
+    df_train: pd.DataFrame,
+    df_test: pd.DataFrame,
+    wrapper,
+    preprocessor,
+    target_col="target",
+    num_cf=3,
+    n_tests=10,
+):
+    print("\n" + "=" * 60)
+    print(f" CHẠY BENCHMARK VỚI DiCE (BASELINE) - {target_col.upper()} ")
+    print("=" * 60)
+
+    metadata = preprocessor.get_metadata()
+    num_features = metadata["num_features"]
+    actionable_features = metadata["actionable"]
+
+    # 1. KHỞI TẠO DiCE DATA
+    print("[1] Khởi tạo DiCE Data...")
+    d = Data(dataframe=df_train, continuous_features=num_features, outcome_name=target_col)
+
+    # 2. KHỞI TẠO DiCE MODEL (Adapter)
+    print("[2] Khởi tạo DiCE Model (Bọc Black-box Wrapper)...")
+
+    # Lấy giá trị xuất hiện nhiều nhất (mode) của các cột để làm sạch dữ liệu đột biến của DiCE
+    cat_modes = {col: df_train[col].mode()[0] for col in metadata["cat_features"] if col in df_train.columns}
 
     # Truyền thêm cat_modes vào trong Adapter
     m = Model(model=DiCEAdapter(wrapper, d.feature_names, cat_modes), backend="sklearn")
@@ -186,8 +189,8 @@ def run_dice_benchmark(
 
 
 def _load_embed_model(dataset: str, device: torch.device) -> tuple[EmbedMLP, dict[str, Any]]:
-    cfg_path = RESULTS_DIR / dataset / "best_configs.json"
-    model_path = MODELS_DIR / dataset / "embed_mlp_best.pkl"
+    cfg_path = OUTPUTS_DIR / dataset / "models" / "best_configs.json"
+    model_path = OUTPUTS_DIR / dataset / "models" / "embed_mlp_best.pkl"
 
     if not cfg_path.exists():
         raise FileNotFoundError(f"Không tìm thấy best config tại: {cfg_path}")
@@ -197,7 +200,7 @@ def _load_embed_model(dataset: str, device: torch.device) -> tuple[EmbedMLP, dic
     with open(cfg_path, "r", encoding="utf-8") as f:
         cfg_json = json.load(f)
 
-    best_cfg = cfg_json.get("embed_mlp", {}).get("best_config", {})
+    best_cfg = cfg_json.get("embed_mlp", {})
     if not best_cfg:
         raise ValueError(f"best_configs.json không có cấu hình cho embed_mlp của bộ {dataset}.")
 

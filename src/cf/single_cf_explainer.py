@@ -30,9 +30,21 @@ from pymoo.optimize import minimize
 from pymoo.operators.crossover.sbx import SBX
 from pymoo.operators.mutation.pm import PM
 
-OUTPUTS_DIR = PROJECT_ROOT / "src" / "outputs"
+OUTPUTS_DIR = PROJECT_ROOT / "outputs"
 MODELS_DIR = OUTPUTS_DIR / "models"
 RESULTS_DIR = OUTPUTS_DIR / "results"
+
+
+def _load_decision_threshold(dataset: str) -> float:
+    eval_path = OUTPUTS_DIR / dataset / "models" / "eval_results.json"
+    if not eval_path.exists():
+        return 0.5
+
+    with open(eval_path, "r", encoding="utf-8") as f:
+        eval_json = json.load(f)
+
+    threshold = eval_json.get("embed_mlp", {}).get("best_threshold", 0.5)
+    return float(threshold or 0.5)
 
 # SINGLE-CF (WACHTER)
 
@@ -76,9 +88,10 @@ class SingleCFProblem(ElementwiseProblem):
 
 # Luồng tải mô hình hệ thống
 
-def _load_embed_model(dataset: str, device: torch.device) -> tuple[EmbedMLP, dict[str, Any]]:
-    cfg_path = RESULTS_DIR / dataset / "best_configs.json"
-    model_path = MODELS_DIR / dataset / "embed_mlp_best.pkl"
+def _load_embed_model(dataset: str, device: torch.device) -> tuple[EmbedMLP, dict[str, Any], float]:
+    cfg_path = OUTPUTS_DIR / dataset / "models" / "best_configs.json"
+    model_path = OUTPUTS_DIR / dataset / "models" / "embed_mlp_best.pkl"
+    eval_path = OUTPUTS_DIR / dataset / "models" / "eval_results.json"
 
     if not cfg_path.exists():
         raise FileNotFoundError(f"Không tìm thấy best config tại: {cfg_path}")
@@ -88,7 +101,16 @@ def _load_embed_model(dataset: str, device: torch.device) -> tuple[EmbedMLP, dic
     with open(cfg_path, "r", encoding="utf-8") as f:
         cfg_json = json.load(f)
 
-    best_cfg = cfg_json.get("embed_mlp", {}).get("best_config", {})
+    best_cfg = cfg_json.get("embed_mlp", {})
+    if not best_cfg:
+        raise ValueError(f"best_configs.json không có cấu hình cho embed_mlp của bộ {dataset}.")
+
+    decision_threshold = 0.5
+    if eval_path.exists():
+        with open(eval_path, "r", encoding="utf-8") as f:
+            eval_json = json.load(f)
+        decision_threshold = float(eval_json.get("embed_mlp", {}).get("best_threshold", 0.5) or 0.5)
+
     model = EmbedMLP(
         input_num_dim=int(best_cfg["input_num_dim"]),
         cat_dims=list(best_cfg["cat_dims"]),
@@ -96,6 +118,7 @@ def _load_embed_model(dataset: str, device: torch.device) -> tuple[EmbedMLP, dic
         hidden_dims=(int(best_cfg["hidden_h1"]), int(best_cfg["hidden_h2"])),
         dropout=float(best_cfg.get("dropout", 0.3)),
     )
+
     try:
         state = torch.load(model_path, map_location=device, weights_only=True)
     except TypeError:
@@ -103,9 +126,12 @@ def _load_embed_model(dataset: str, device: torch.device) -> tuple[EmbedMLP, dic
         
     if isinstance(state, dict):
         model.load_state_dict(state)
+    else:
+        raise ValueError("embed_mlp_best.pkl không phải state_dict như mong đợi.")
+
     model.to(device)
     model.eval()
-    return model, best_cfg
+    return model, best_cfg, decision_threshold
 
 # MAIN WORKFLOW
 
@@ -117,9 +143,11 @@ def main():
 
     dataset_name = args.dataset
     target_col = get_target_col(dataset_name)
+    decision_threshold = _load_decision_threshold(dataset_name)
 
     print("=" * 70)
     print(f"Running baseline: single-cf (wachter) on: {dataset_name.upper()}")
+    print(f"Decision threshold: {decision_threshold:.6f}")
     print("=" * 70)
 
     df = load_data(dataset_name)
@@ -130,7 +158,7 @@ def main():
     preprocessor.fit(X_train=X_train)
     
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model, best_cfg = _load_embed_model(dataset_name, device)
+    model, best_cfg, decision_threshold = _load_embed_model(dataset_name, device)
     wrapper = EmbedMLPWrapper(model=model, preprocessor=preprocessor, device=device)
 
     # SỬA LỖI: Khởi tạo mô hình LOF cục bộ phục vụ cho việc đánh giá LOF-NR 
@@ -143,7 +171,8 @@ def main():
     evaluator = CFMEvaluator(
         preprocessor=preprocessor,
         plausibility_module=lof_model,  
-        df_train_raw=df_train_raw
+        df_train_raw=df_train_raw,
+        decision_threshold=decision_threshold,
     )
 
     rejected_label = 0
@@ -152,7 +181,7 @@ def main():
         actual_label = y_test.iloc[count]
         if int(actual_label) == rejected_label: 
             prob = wrapper.predict_proba(row.to_frame().T)[0]
-            if prob < 0.5:
+            if prob < decision_threshold:
                 valid_rejected_instances.append((row, prob))
         if len(valid_rejected_instances) == args.n_tests:
             break
