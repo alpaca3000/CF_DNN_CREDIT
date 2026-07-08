@@ -11,7 +11,8 @@ class CFMEvaluator:
         self, 
         preprocessor: Any, 
         plausibility_module: Any, 
-        df_train_raw: pd.DataFrame
+        df_train_raw: pd.DataFrame,
+        decision_threshold: float = 0.5,
     ):
         """
         Khởi tạo Evaluator với các "tri thức" đã được huấn luyện từ trước.
@@ -23,6 +24,7 @@ class CFMEvaluator:
         
         # Sử dụng module LOF đã được train từ Generator/Offline Setup
         self.plausibility_module = plausibility_module
+        self.decision_threshold = float(decision_threshold)
         
         # Tính toán ranges (Max - Min) để chuẩn hóa Cont-Proximity
         ranges = []
@@ -44,7 +46,7 @@ class CFMEvaluator:
         
         # 0. VALIDITY
         if "predicted_prob" in cf_df.columns:
-            validity = float(np.mean(cf_df["predicted_prob"] >= 0.50))
+            validity = float(np.mean(cf_df["predicted_prob"] >= self.decision_threshold))
         else:
             validity = 1.0 # Giả định các mẫu truyền vào đều đã hợp lệ
 
@@ -91,7 +93,7 @@ class CFMEvaluator:
         # Theo lý thuyết: LOF ~ 1 là inlier, LOF >> 1 là outlier
         lof_scores = -negative_lof_scores
         
-        # Áp dụng TRỰC TIẾP bất đẳng thức của bài báo (Ví dụ ngưỡng là 1.1)
+        # Ngưỡng inlier
         inlier_threshold = 1.15 
         
         # Đếm tỷ lệ mẫu thỏa mãn bất đẳng thức: LOF <= ngưỡng
