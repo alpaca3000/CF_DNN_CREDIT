@@ -6,7 +6,7 @@ on GermanCredit, GMSC, LendingClub datasets.
 Ghi lại kết quả so sánh để tìm best model.
 
 Usage:
-    python -m src.models.train --dataset german_credit --n-trials 20
+    python -m src.models.train --dataset german_credit  --model embed_mlp --n-trials 20 --verbose
     python -m src.models.train --dataset gmsc --n-trials 20 --verbose
 """
 
@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any, Dict
 import numpy as np
 import torch
+import pandas as pd
 from sklearn.metrics import accuracy_score, roc_auc_score, f1_score, average_precision_score
 
 from src.models.classic_mlp import get_classic_mlp_search_space, build_classic_mlp
@@ -78,7 +79,7 @@ def tune_model(
             y_val=y_valid,
             n_trials=n_trials,
             verbose=verbose,
-            select_metric="pr_auc",
+            select_metric="auc",
         )
     
     if model == "xgboost":
@@ -92,7 +93,7 @@ def tune_model(
             y_val=y_valid,
             n_trials=n_trials,
             verbose=verbose,
-            select_metric="pr_auc",
+            select_metric="auc",
         )
 
     if model == "classic_mlp":
@@ -106,7 +107,7 @@ def tune_model(
             val_loader=valid_loader,
             n_trials=n_trials,
             verbose=verbose,
-            select_metric="pr_auc",
+            select_metric="auc",
         )
     
     if model == "embed_mlp":
@@ -341,7 +342,7 @@ def main(
     print("\n" + "=" * 60)
     print(f"FINISHED TUNING {model.upper()} ON {dataset.upper()}")
     print("=" * 60)
-    print(f"Best PR-AUC: {tuning_result['best_score']:.6f}")
+    print(f"Best AUC: {tuning_result['best_score']:.6f}")
 
     eval_result = evaluate_model(
         model=model,
@@ -350,6 +351,50 @@ def main(
         y_test=y_test_pp,
         metadata=metadata,
     )
+
+    # --- Save predictions on test set to outputs/<dataset>/predictions_<model>.csv ---
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    pred_file = OUTPUT_DIR / dataset / f"predictions_{model}.csv"
+    try:
+        if model in ["random_forest", "xgboost"]:
+            prob_np = tuning_result["best_model"].predict_proba(X_test_pp)
+            if prob_np.ndim == 2:
+                prob_np = prob_np[:, 1]
+            pred_np = (prob_np >= 0.5).astype(int)
+        elif model == "classic_mlp":
+            test_loader = create_dataloaders(X=X_test_pp, y=y_test_pp)
+            probs, preds = predict(
+                model=tuning_result["best_model"],
+                test_loader=test_loader,
+                device=device,
+            )
+            prob_np = probs.cpu().numpy()
+            pred_np = preds.cpu().numpy()
+        elif model == "embed_mlp":
+            cat_idxs = metadata.get("cat_idxs", [])
+            test_loader = create_embedding_dataloaders(X=X_test_pp, y=y_test_pp, cat_idxs=cat_idxs)
+            probs, preds = predict(
+                model=tuning_result["best_model"],
+                test_loader=test_loader,
+                device=device,
+            )
+            prob_np = probs.cpu().numpy()
+            pred_np = preds.cpu().numpy()
+        else:
+            prob_np = None
+            pred_np = None
+
+        if prob_np is not None:
+            df_preds = pd.DataFrame({
+                "y_true": np.asarray(y_test_pp).reshape(-1),
+                "prob": np.asarray(prob_np).reshape(-1),
+                "pred": np.asarray(pred_np).reshape(-1),
+            })
+            pred_file.parent.mkdir(parents=True, exist_ok=True)
+            df_preds.to_csv(pred_file, index=False)
+            print(f"Saved predictions to {pred_file}")
+    except Exception as e:
+        print(f"Warning: failed to save predictions: {e}")
 
     print("\n" + "=" * 60)
     print(f"EVALUATION RESULTS ON TEST SET - {model.upper()} ON {dataset.upper()}")
