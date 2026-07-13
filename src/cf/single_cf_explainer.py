@@ -86,6 +86,70 @@ class SingleCFProblem(ElementwiseProblem):
         out["F"] = [f1_yloss, f2_dist]
 
 
+# Kết nối với run_experiments class SingleCFGenerator:
+    def __init__(self, model_wrapper, df_train_raw, target_col="target"):
+        """
+        Khởi tạo Generator cho Single-CF (Wachter Baseline) tương thích với cấu hình thực nghiệm.
+        """
+        self.wrapper = model_wrapper
+        self.target_col = target_col
+        self.feature_names = [col for col in df_train_raw.columns if col != target_col]
+        
+        # Trích xuất preprocessor từ wrapper để thực hiện encode/decode dữ liệu
+        self.preprocessor = model_wrapper.preprocessor
+        
+        # Khởi tạo không gian tìm kiếm bounds [0, 1] dựa trên số lượng đặc trưng sau biến đổi
+        # Lấy mẫu 1 dòng từ df_train_raw để kiểm tra kích thước đầu ra
+        X_sample = df_train_raw.drop(columns=[target_col], errors='ignore').head(1)
+        dummy_transform = self.preprocessor.transform(X_sample)
+        n_features_scaled = dummy_transform.shape[1]
+        
+        self.xl = np.zeros(n_features_scaled)
+        self.xu = np.ones(n_features_scaled)
+
+    def generate(self, x_req: pd.Series, pop_size: int = 100, n_gen: int = 50, num_cf: int = 3) -> pd.DataFrame:
+        """
+        Sinh Counterfactual cho một hồ sơ khách hàng đơn lẻ (x_req).
+        Giao diện hàm này đồng bộ hoàn toàn với cấu trúc gọi từ run_experiments.py.
+        """
+        # 1. Chuyển đổi Series thành DataFrame 1 dòng và transform sang không gian scaled
+        x_req_df = x_req.to_frame().T if isinstance(x_req, pd.Series) else pd.DataFrame([x_req])
+        # Đảm bảo loại bỏ các cột không liên quan nếu có
+        x_req_df = x_req_df.drop(columns=[self.target_col], errors='ignore').drop(columns=["y_prob"], errors='ignore')
+        
+        x_req_scaled = self.preprocessor.transform(x_req_df)[0]
+        
+        # 2. Khởi tạo SingleCFProblem
+        problem = SingleCFProblem(
+            x_original_scaled=x_req_scaled,
+            wrapper=self.wrapper,
+            xl=self.xl,
+            xu=self.xu,
+            feature_names=self.feature_names,
+            feature_weights=None
+        )
+        
+        # 3. Cấu hình NSGA-II 
+        algorithm = NSGA2(
+            pop_size=pop_size, 
+            crossover=SBX(prob=0.9, eta=15), 
+            mutation=PM(prob=0.1, eta=20) 
+        )
+        
+        # 4. Thực thi tối ưu hóa tìm Pareto Front
+        res = minimize(problem, algorithm, termination=('n_gen', n_gen), seed=42, verbose=False)
+        
+        if res.X is None or len(res.X) == 0:
+            return pd.DataFrame() # Trả về DF rỗng nếu không tìm thấy nghiệm
+            
+        # 5. Giải nén tập nghiệm Pareto và lấy số lượng ứng viên theo yêu cầu num_cf
+        best_candidates = res.X[:num_cf] if res.X.ndim > 1 else np.array([res.X])
+        
+        # 6. Biến đổi ngược về dạng dữ liệu thô (raw DataFrame) ban đầu
+        cf_results = self.preprocessor.inverse_transform(best_candidates)
+        
+        return cf_results
+
 # Luồng tải mô hình hệ thống
 
 def _load_embed_model(dataset: str, device: torch.device) -> tuple[EmbedMLP, dict[str, Any], float]:
