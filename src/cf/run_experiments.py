@@ -1,4 +1,4 @@
-# usage: python -m src.cf.run_experiments --dataset german_credit --n-tests 10 --seed 123 --n-runs 5 --fw single_cf
+# usage: python -m src.cf.run_experiments --dataset german_credit --n-tests 10 --n-runs 5 --fw single_cf
 
 import argparse
 import json
@@ -19,6 +19,8 @@ from src.cf.metric_evaluator import CFMEvaluator
 from src.data_processing.utils import load_data, split_data, get_target_col
 from src.data_processing.domain_preprocess import GermanCreditDomainPreprocessor
 from src.cf.dice_explainer import DiCEAdapter
+import warnings
+warnings.filterwarnings("ignore", category=RuntimeWarning)
 
 # Setup đường dẫn hệ thống
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -301,7 +303,6 @@ def main():
     parser = argparse.ArgumentParser(description="Random sample test data for counterfactual experiments.")
     parser.add_argument("--dataset", type=str, required=True, help="Tên bộ dữ liệu.")
     parser.add_argument("--n-tests", type=int, default=10, help="Số lượng mẫu test cần lấy ngẫu nhiên.")
-    parser.add_argument("--seed", type=int, default=123, help="Seed gốc.")
     parser.add_argument("--fw", type=str, choices=["single_cf", "dice", "cfm", "all"], required=True)
     parser.add_argument("--n-runs", type=int, default=1, help="Số lần chạy thực nghiệm")
     
@@ -380,7 +381,8 @@ def main():
                 wrapper=wrapper,
                 target_col=target_col,
                 num_cf=3,
-                decision_threshold=threshold
+                decision_threshold=threshold,
+                n_tests=n_test
             )
             results_store["dice"].append(result_sample_dice)
 

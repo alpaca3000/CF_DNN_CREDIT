@@ -105,103 +105,103 @@ class PlausibilityLOF:
         return self.lof_model.predict(X_new_scaled)
 
 
-if __name__ == "__main__":
-    from pathlib import Path
-    import sys
-    import pandas as pd
-    from sklearn.model_selection import train_test_split
+# if __name__ == "__main__":
+#     from pathlib import Path
+#     import sys
+#     import pandas as pd
+#     from sklearn.model_selection import train_test_split
     
-    from src.data_processing.preprocess import CreditPreprocessor
+#     from src.data_processing.preprocess import CreditPreprocessor
 
-    PROJECT_ROOT = Path(__file__).resolve().parents[3]
-    if str(PROJECT_ROOT) not in sys.path:
-        sys.path.insert(0, str(PROJECT_ROOT))
+#     PROJECT_ROOT = Path(__file__).resolve().parents[3]
+#     if str(PROJECT_ROOT) not in sys.path:
+#         sys.path.insert(0, str(PROJECT_ROOT))
     
-    data_name = "lending_club"  # Thử nghiệm với German Credit
+#     data_name = "lending_club"  # Thử nghiệm với German Credit
 
-    target_data_dict = {
-        "lending_club": {
-            "data_file": "lendingclub.csv",
-            "target_col": "target",
-        },
-        "german_credit": {
-            "data_file": "german_credit.csv",
-            "target_col": "Class",
-        },
-        "gmsc": {
-            "data_file": "gmsc.csv",
-            "target_col": "target",
-        },
+#     target_data_dict = {
+#         "lending_club": {
+#             "data_file": "lendingclub.csv",
+#             "target_col": "target",
+#         },
+#         "german_credit": {
+#             "data_file": "german_credit.csv",
+#             "target_col": "Class",
+#         },
+#         "gmsc": {
+#             "data_file": "gmsc.csv",
+#             "target_col": "target",
+#         },
 
-    }
+#     }
 
-    data_path = PROJECT_ROOT / "data" / target_data_dict[data_name]["data_file"]
+#     data_path = PROJECT_ROOT / "data" / target_data_dict[data_name]["data_file"]
 
-    print("=" * 70)
-    print("[LOF TEST] " + data_name.replace("_", " ").title() + " - PlausibilityLOF sanity script")
-    print("=" * 70)
+#     print("=" * 70)
+#     print("[LOF TEST] " + data_name.replace("_", " ").title() + " - PlausibilityLOF sanity script")
+#     print("=" * 70)
 
-    if not data_path.exists():
-        raise FileNotFoundError(f"Không tìm thấy file dữ liệu: {data_path}")
+#     if not data_path.exists():
+#         raise FileNotFoundError(f"Không tìm thấy file dữ liệu: {data_path}")
 
-    df = pd.read_csv(data_path)
-    if target_data_dict[data_name]["target_col"] not in df.columns:
-        raise ValueError(f"{data_name.replace('_', ' ').title()} cần có cột nhãn '{target_data_dict[data_name]['target_col']}'.")
+#     df = pd.read_csv(data_path)
+#     if target_data_dict[data_name]["target_col"] not in df.columns:
+#         raise ValueError(f"{data_name.replace('_', ' ').title()} cần có cột nhãn '{target_data_dict[data_name]['target_col']}'.")
 
-    X = df.drop(columns=[target_data_dict[data_name]["target_col"]]).copy()
-    y = df[target_data_dict[data_name]["target_col"]].copy()
+#     X = df.drop(columns=[target_data_dict[data_name]["target_col"]]).copy()
+#     y = df[target_data_dict[data_name]["target_col"]].copy()
 
-    X_train, X_test, _, _ = train_test_split(
-        X,
-        y,
-        test_size=0.2,
-        random_state=42,
-        stratify=y,
-    )
+#     X_train, X_test, _, _ = train_test_split(
+#         X,
+#         y,
+#         test_size=0.2,
+#         random_state=42,
+#         stratify=y,
+#     )
 
-    preprocessor = CreditPreprocessor(dataset_name=data_name, model_type="embedding")
-    X_train_processed = preprocessor.fit_transform(X_train)
-    X_test_processed = preprocessor.transform(X_test)
+#     preprocessor = CreditPreprocessor(dataset_name=data_name, model_type="embedding")
+#     X_train_processed = preprocessor.fit_transform(X_train)
+#     X_test_processed = preprocessor.transform(X_test)
 
-    lof = PlausibilityLOF(n_neighbors=100)
-    lof.fit(X_train_processed)
+#     lof = PlausibilityLOF(n_neighbors=100)
+#     lof.fit(X_train_processed)
 
-    stats = lof.get_train_stats()
-    # score_samples của sklearn trả về điểm âm (càng âm càng bất thường).
-    # Quy đổi về LOF "chuẩn" bằng công thức: lof_value = -score_samples,
-    # khi đó mẫu bình thường thường gần 1, outlier thường > 1.
-    print(f"[OK] Train stats: min={stats['min']:.6f}, max={stats['max']:.6f}")
+#     stats = lof.get_train_stats()
+#     # score_samples của sklearn trả về điểm âm (càng âm càng bất thường).
+#     # Quy đổi về LOF "chuẩn" bằng công thức: lof_value = -score_samples,
+#     # khi đó mẫu bình thường thường gần 1, outlier thường > 1.
+#     print(f"[OK] Train stats: min={stats['min']:.6f}, max={stats['max']:.6f}")
 
-    train_scores = lof.score_samples(X_train_processed)
-    train_lof_values = -train_scores
-    train_pct_leq_1 = (train_lof_values <= 1.0).mean() * 100
-    print(f"[CHECK][TRAIN] % mẫu có LOF <= 1: {train_pct_leq_1:.2f}%")
-    print(f"               % mẫu có LOF <= 1.2 : {(train_lof_values <= 1.2).mean() * 100:.2f}%")
-    print(f"               % mẫu có LOF > 1 : {100 - train_pct_leq_1:.2f}%")
+#     train_scores = lof.score_samples(X_train_processed)
+#     train_lof_values = -train_scores
+#     train_pct_leq_1 = (train_lof_values <= 1.0).mean() * 100
+#     print(f"[CHECK][TRAIN] % mẫu có LOF <= 1: {train_pct_leq_1:.2f}%")
+#     print(f"               % mẫu có LOF <= 1.2 : {(train_lof_values <= 1.2).mean() * 100:.2f}%")
+#     print(f"               % mẫu có LOF > 1 : {100 - train_pct_leq_1:.2f}%")
 
-    test_scores = lof.score_samples(X_test_processed)
-    test_lof_values = -test_scores
-    test_pct_leq_1 = (test_lof_values <= 1.0).mean() * 100
-    print(f"[OK] score_samples shape: {test_scores.shape}")
-    print(f"     sample scores (5): {np.round(test_scores[:5], 6)}")
-    print(f"     sample LOF (5): {np.round(test_lof_values[:5], 6)}")
-    print(f"[CHECK][TEST ] % mẫu có LOF <= 1: {test_pct_leq_1:.2f}%")
-    print(f"               % mẫu có LOF > 1 : {100 - test_pct_leq_1:.2f}%")
+#     test_scores = lof.score_samples(X_test_processed)
+#     test_lof_values = -test_scores
+#     test_pct_leq_1 = (test_lof_values <= 1.0).mean() * 100
+#     print(f"[OK] score_samples shape: {test_scores.shape}")
+#     print(f"     sample scores (5): {np.round(test_scores[:5], 6)}")
+#     print(f"     sample LOF (5): {np.round(test_lof_values[:5], 6)}")
+#     print(f"[CHECK][TEST ] % mẫu có LOF <= 1: {test_pct_leq_1:.2f}%")
+#     print(f"               % mẫu có LOF > 1 : {100 - test_pct_leq_1:.2f}%")
 
-    pred_labels = lof.predict_inliers(X_test_processed)
-    unique_labels = np.unique(pred_labels)
-    print(f"[OK] predict labels unique: {unique_labels.tolist()}")
-    print(f"     inlier ratio: {(pred_labels == 1).mean():.4f}")
-    print(f"     outlier ratio: {(pred_labels == -1).mean():.4f}")
+#     pred_labels = lof.predict_inliers(X_test_processed)
+#     unique_labels = np.unique(pred_labels)
+#     print(f"[OK] predict labels unique: {unique_labels.tolist()}")
+#     print(f"     inlier ratio: {(pred_labels == 1).mean():.4f}")
+#     print(f"     outlier ratio: {(pred_labels == -1).mean():.4f}")
 
-    assert np.isfinite(stats["min"]) and np.isfinite(stats["max"])
-    assert test_scores.ndim == 1 and len(test_scores) == len(X_test_processed)
-    assert set(unique_labels).issubset({-1, 1})
+#     assert np.isfinite(stats["min"]) and np.isfinite(stats["max"])
+#     assert test_scores.ndim == 1 and len(test_scores) == len(X_test_processed)
+#     assert set(unique_labels).issubset({-1, 1})
 
-    one_score = lof.score_samples(X_test_processed[0])
-    one_pred = lof.predict_inliers(X_test_processed[0])
-    assert one_score.shape == (1,)
-    assert one_pred.shape == (1,)
-    assert np.isfinite(train_lof_values).all() and np.isfinite(test_lof_values).all()
+#     one_score = lof.score_samples(X_test_processed[0])
+#     one_pred = lof.predict_inliers(X_test_processed[0])
+#     assert one_score.shape == (1,)
+#     assert one_pred.shape == (1,)
+#     assert np.isfinite(train_lof_values).all() and np.isfinite(test_lof_values).all()
 
-    print("\n[SUCCESS] LOF test script chạy ổn trên German Credit.")
+#     print("\n[SUCCESS] LOF test script chạy ổn trên German Credit.")

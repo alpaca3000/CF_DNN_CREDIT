@@ -9,24 +9,50 @@ from src.cf.cfm_fm.objectives import validity, proximity, rim, plausibility
 
 def create_pymoo_space(df_train: pd.DataFrame, metadata: dict, x_original: pd.Series) -> dict:
     space = {}
-    num_features = metadata["num_features"]
-    cat_features = metadata["cat_features"]
-    immutable = metadata.get("immutable", [])
+    num_features = metadata.get("num_features", [])
+    cat_features = metadata.get("cat_features", [])
     
+    # 1. Trích xuất rules từ config (được truyền qua biến metadata)
+    causal_rules = metadata.get("causal_rules", [])
+    
+    # 2. Phân loại các thuộc tính theo chiều thay đổi (type)
+    increasing_features = [rule["feature"] for rule in causal_rules if rule["type"] == ">="]
+    decreasing_features = [rule["feature"] for rule in causal_rules if rule["type"] == "<="]
+    
+    # 3. Gộp các biến bất biến (từ key "immutable" và từ "causal_rules" type "==")
+    immutable_list = metadata.get("immutable", [])
+    immutable_from_rules = [rule["feature"] for rule in causal_rules if rule["type"] == "=="]
+    # Dùng set() để loại bỏ các biến trùng lặp
+    immutable_features = set(immutable_list + immutable_from_rules)
+
+    # 4. Xây dựng không gian biến liên tục (Numerical)
     for col in num_features:
-        if col in immutable:
-            val = float(x_original[col])
-            # Khóa cứng biến không đổi
+        val = float(x_original[col])
+        min_train, max_train = float(df_train[col].min()), float(df_train[col].max())
+        
+        if col in immutable_features:
+            # Dấu == (Bất biến): Cận dưới và cận trên đều bằng giá trị gốc
             space[col] = Real(bounds=(val, val))
-        else:
-            # Lấy min/max thực tế từ tập train để đảm bảo tính thực tế
-            min_val, max_val = float(df_train[col].min()), float(df_train[col].max())
-            space[col] = Real(bounds=(min_val, max_val))
             
+        elif col in increasing_features:
+            # Dấu >= (Chỉ tăng): Khởi điểm là giá trị gốc, tối đa là max của tập train
+            space[col] = Real(bounds=(val, max_train))
+            
+        elif col in decreasing_features:
+            # Dấu <= (Chỉ giảm): Tối thiểu là min của tập train, tối đa là giá trị gốc
+            space[col] = Real(bounds=(min_train, val))
+            
+        else:
+            # Tự do: Chạy từ min đến max của tập train
+            space[col] = Real(bounds=(min_train, max_train))
+            
+    # 5. Xây dựng không gian biến phân loại (Categorical)
     for col in cat_features:
-        if col in immutable:
+        if col in immutable_features:
+            # Bất biến: Chỉ có 1 lựa chọn duy nhất là giá trị hiện tại
             space[col] = Choice(options=[x_original[col]])
         else:
+            # Tự do: Được phép thay đổi sang bất kỳ giá trị nào từng xuất hiện trong tập train
             unique_vals = df_train[col].dropna().unique().tolist()
             space[col] = Choice(options=unique_vals)
             
@@ -94,7 +120,7 @@ class CFMProblem(ElementwiseProblem):
         # Tạo DataFrame 1 dòng dùng cho các model dự đoán
         x_df = pd.DataFrame([x])
 
-        # --- F1: VALIDITY ---
+        # --- VALIDITY ---
         # model_wrapper nhận DataFrame thô, tự động pre-process và dự đoán
         pred_probs = self.model_wrapper.predict_proba(x_df)
         
@@ -106,17 +132,17 @@ class CFMProblem(ElementwiseProblem):
             
         f1_validity = validity(prob, self.target_prob)
 
-        # --- F2: PROXIMITY ---
+        # --- PROXIMITY ---
         f2_proximity = proximity(
             orig_arr, x_arr, self.w_arr, self.num_ranges, cat_mask=self.cat_mask
         )
 
-        # --- F3: RIM ---
+        # --- RIM ---
         f3_rim = rim(
             orig_arr, x_arr, self.w_arr, self.num_ranges, cat_mask=self.cat_mask
         )
 
-        # --- F4: PLAUSIBILITY ---
+        # --- PLAUSIBILITY ---
         # Giả sử model_wrapper có bộ preprocessor để dùng chung
         x_scaled = self.model_wrapper.preprocessor.transform(x_df)
         current_lof_score = self.plausibility_module.score_samples(x_scaled)[0]
