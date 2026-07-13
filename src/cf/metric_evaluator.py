@@ -83,21 +83,27 @@ class CFMEvaluator:
             cat_spars = 0.0, 0.0
 
         # 3. LOF-NR (Novelty Rejection - Plausibility)
-        # Sử dụng preprocessor hệ thống thay vì tự viết lại scaler/encoder
+        # Sử dụng preprocessor hệ thống
         cf_scaled = self.preprocessor.transform(cf_features)
         
-        # Lấy điểm số từ mô hình (sklearn trả về số âm)
-        negative_lof_scores = self.plausibility_module.score_samples(cf_scaled)
+        # # Lấy điểm số từ mô hình (sklearn trả về số âm)
+        # negative_lof_scores = self.plausibility_module.score_samples(cf_scaled)
         
-        # Đảo dấu để trở thành điểm LOF dương nguyên thủy (LOF >= 0)
-        # Theo lý thuyết: LOF ~ 1 là inlier, LOF >> 1 là outlier
-        lof_scores = -negative_lof_scores
+        # # Đảo dấu để trở thành điểm LOF dương nguyên thủy (LOF >= 0)
+        # # Theo lý thuyết: LOF ~ 1 là inlier, LOF >> 1 là outlier
+        # lof_scores = -negative_lof_scores
         
-        # Ngưỡng inlier
-        inlier_threshold = 1.15 
+        # # Ngưỡng inlier
+        # inlier_threshold = 1.15 
         
-        # Đếm tỷ lệ mẫu thỏa mãn bất đẳng thức: LOF <= ngưỡng
-        lof_nr = float(np.mean(lof_scores <= inlier_threshold))
+        # # Đếm tỷ lệ mẫu thỏa mãn bất đẳng thức: LOF <= ngưỡng
+        # lof_nr = float(np.mean(lof_scores <= inlier_threshold))
+
+        # dùng hàm predict_inliers() của plausibility_module để đánh giá trực tiếp
+        cf_labels = self.plausibility_module.predict_inliers(cf_scaled)
+
+        # Đếm tỷ lệ mẫu là inlier (cf_labels == 1)
+        lof_nr = float(np.mean(cf_labels == 1))
 
         return {
             "Validity": round(validity, 4),
