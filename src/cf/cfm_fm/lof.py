@@ -31,13 +31,6 @@ class PlausibilityLOF:
         self.is_fitted = False
 
     def fit(self, X_train_scaled: np.ndarray):
-        """
-        Huấn luyện mô hình LOF trên tập dữ liệu Train ĐÃ QUA TIỀN XỬ LÝ (Encoded & Scaled).
-        Đồng thời tính toán và lưu lại điểm số min/max của tập Train để chuẩn hóa Min-Max sau này.
-        
-        Args:
-            X_train_scaled (np.ndarray): Ma trận dữ liệu huấn luyện (chỉ chứa số).
-        """
         if not isinstance(X_train_scaled, np.ndarray):
             X_train_scaled = np.array(X_train_scaled)
 
@@ -45,11 +38,8 @@ class PlausibilityLOF:
         self.lof_model.fit(X_train_scaled)
         self.is_fitted = True
 
-        # Trích xuất điểm LOF của chính tập Train.
-        # Lưu ý: Khi novelty=True, score_samples() trả về điểm âm (càng âm càng là outlier)
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            train_scores = self.lof_model.score_samples(X_train_scaled)
+        # [ĐÃ SỬA]: Lấy điểm trực tiếp từ thuộc tính mô hình, KHÔNG gọi lại score_samples
+        train_scores = self.lof_model.negative_outlier_factor_
         
         self.min_train_lof = float(np.min(train_scores))
         self.max_train_lof = float(np.max(train_scores))
@@ -126,21 +116,40 @@ if __name__ == "__main__":
     PROJECT_ROOT = Path(__file__).resolve().parents[3]
     if str(PROJECT_ROOT) not in sys.path:
         sys.path.insert(0, str(PROJECT_ROOT))
-    data_path = PROJECT_ROOT / "data" / "lendingclub.csv"
+    
+    data_name = "lending_club"  # Thử nghiệm với German Credit
+
+    target_data_dict = {
+        "lending_club": {
+            "data_file": "lendingclub.csv",
+            "target_col": "target",
+        },
+        "german_credit": {
+            "data_file": "german_credit.csv",
+            "target_col": "Class",
+        },
+        "gmsc": {
+            "data_file": "gmsc.csv",
+            "target_col": "target",
+        },
+
+    }
+
+    data_path = PROJECT_ROOT / "data" / target_data_dict[data_name]["data_file"]
 
     print("=" * 70)
-    print("[LOF TEST] German Credit - PlausibilityLOF sanity script")
+    print("[LOF TEST] " + data_name.replace("_", " ").title() + " - PlausibilityLOF sanity script")
     print("=" * 70)
 
     if not data_path.exists():
         raise FileNotFoundError(f"Không tìm thấy file dữ liệu: {data_path}")
 
     df = pd.read_csv(data_path)
-    if "target" not in df.columns:
-        raise ValueError("Lending Club cần có cột nhãn 'target'.")
+    if target_data_dict[data_name]["target_col"] not in df.columns:
+        raise ValueError(f"{data_name.replace('_', ' ').title()} cần có cột nhãn '{target_data_dict[data_name]['target_col']}'.")
 
-    X = df.drop(columns=["target"]).copy()
-    y = df["target"].copy()
+    X = df.drop(columns=[target_data_dict[data_name]["target_col"]]).copy()
+    y = df[target_data_dict[data_name]["target_col"]].copy()
 
     X_train, X_test, _, _ = train_test_split(
         X,
@@ -150,7 +159,7 @@ if __name__ == "__main__":
         stratify=y,
     )
 
-    preprocessor = CreditPreprocessor(dataset_name="lending_club", model_type="embedding")
+    preprocessor = CreditPreprocessor(dataset_name=data_name, model_type="embedding")
     X_train_processed = preprocessor.fit_transform(X_train)
     X_test_processed = preprocessor.transform(X_test)
 
