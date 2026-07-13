@@ -87,6 +87,7 @@ class SingleCFProblem(ElementwiseProblem):
 
 
 # Kết nối với run_experiments class SingleCFGenerator:
+class SingleCFGenerator:
     def __init__(self, model_wrapper, df_train_raw, target_col="target"):
         """
         Khởi tạo Generator cho Single-CF (Wachter Baseline) tương thích với cấu hình thực nghiệm.
