@@ -87,6 +87,21 @@ class CreditPreprocessor:
                     "revol_util", "log_revol_bal", "credit_hist_months", 
                     "inst_to_inc_ratio", "state_risk_score", "emp_length"
                 ],
+                # Ép logic 1 chiều cho các biến Actionable (mới thêm — đồng bộ với german_credit)
+                "causal_rules": [
+                    {"feature": "log_loan_amnt", "type": "<="},       # Khuyên giảm số tiền vay
+                    {"feature": "log_annual_inc", "type": ">="},      # Khuyên tăng thu nhập
+                    {"feature": "dti", "type": "<="},                 # Khuyên giảm tỷ lệ nợ/thu nhập
+                    {"feature": "revol_util", "type": "<="},          # Khuyên giảm tỷ lệ dùng hạn mức quay vòng
+                    {"feature": "inst_to_inc_ratio", "type": "<="},   # Khuyên giảm tỷ lệ trả góp/thu nhập
+                    # cho tất cả các biến immutable là không đổi
+                    {"feature": "term_num", "type": "=="},
+                    {"feature": "sub_grade", "type": "=="},
+                    {"feature": "home_ownership", "type": "=="},
+                    {"feature": "purpose_grouped", "type": "=="},
+                    {"feature": "credit_hist_months", "type": "=="},
+                    {"feature": "state_risk_score", "type": "=="},
+                ],
                 "target": "target"
             },
             "gmsc": {
@@ -113,6 +128,20 @@ class CreditPreprocessor:
                     "MonthlyIncome", "NumberOfOpenCreditLinesAndLoans", 
                     "NumberOfTimes90DaysLate", "NumberRealEstateLoansOrLines", 
                     "NumberOfTime60-89DaysPastDueNotWorse"
+                ],
+                # Ép logic 1 chiều cho các biến Actionable (mới thêm — đồng bộ với german_credit)
+                "causal_rules": [
+                    {"feature": "RevolvingUtilizationOfUnsecuredLines", "type": "<="},  # giảm tỷ lệ dùng hạn mức
+                    {"feature": "DebtRatio", "type": "<="},                             # giảm tỷ lệ nợ/thu nhập
+                    {"feature": "MonthlyIncome", "type": ">="},                         # tăng thu nhập
+                    {"feature": "NumberOfOpenCreditLinesAndLoans", "type": "<="},       # giảm số khoản vay đang mở
+                    # cho tất cả các biến immutable là không đổi
+                    {"feature": "age", "type": "=="},
+                    {"feature": "NumberOfTime30-59DaysPastDueNotWorse", "type": "=="},
+                    {"feature": "NumberOfTimes90DaysLate", "type": "=="},
+                    {"feature": "NumberRealEstateLoansOrLines", "type": "=="},
+                    {"feature": "NumberOfTime60-89DaysPastDueNotWorse", "type": "=="},
+                    {"feature": "NumberOfDependents", "type": "=="},
                 ],
                 "target": "target" # Đã sửa đồng bộ cột nhãn từ 'SeriousDlqin2yrs' sang 'target'
             },
